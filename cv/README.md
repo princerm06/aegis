@@ -368,6 +368,36 @@ Results (Nov 14):
 | Pexels woman with orange roses | Rose edges read as blood: red and orange props are a real limit of the color method |
 | Breathing | No stock clip had a fixed camera and a still body for 15 s, so this is still only unit-tested. Record our own |
 
+### Validation takes and the benchmark (one command)
+
+```sh
+python -m cv.tools.validate --list               # the 12 takes and how to do each
+python -m cv.tools.record --take breathe-12      # Logitech by default; a voice reads the setup and cues
+python -m cv.tools.validate                      # score every take and every benchmark clip (~2 min)
+```
+
+A take is a short scripted recording with a known answer. The Mac's voice
+reads the setup, gives 15 s to get in place, then paces breathing ("in",
+"out" at 12 or 20 per minute), says "hold", "close your eyes", or gives the
+spoken command, so whoever lies on the floor does not need to see the screen.
+Takes: `breathe-12`, `breathe-20`, `breathe-blanket`, `breath-hold`,
+`eyes-open-closed`, `response-yes`, `response-no`, `blood-left-arm`, and the
+false-alarm takes `clean`, `red-clothing`, `led-grid`, `red-props`. Clips go
+to `cv/recordings/validation/` (git-ignored) with the take in the sidecar.
+
+`validate` scores each check 0–1 (higher is better) inside its time window:
+breathing rate within 2/min of the pace, no rate while the breath is held,
+eyes / response values, blood on the right region, and the share of samples
+with no false blood. `cv/eval/benchmark.yaml` adds the public clips above. Each
+run is saved to `cv/eval/validation/` (numbers only) and compared with the
+previous one; a drop of more than 0.05 is marked `WORSE`. Run it before and
+after any threshold change.
+
+Baseline (Nov 14, public clips only): car-crash head blood 0.56; roses no
+false blood 0.40 (right arm); three men no false blood 1.00; eyes closed 0.93
+/ 0.85 / 0.49 (the last one is handheld and side-on); UR Fall reaches lying
+9 of 10.
+
 ### Fake casualties (no camera needed)
 
 For building the backend priority and the dashboard while nobody is staging:
@@ -486,7 +516,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-161 tests. The suite covers:
+171 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.
