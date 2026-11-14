@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AEGIS Voice V1 — Simulation Situational Awareness</title>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --panel: #131b29;
+      --border: #24324a;
+      --text: #e6edf7;
+      --muted: #8ea0bc;
+      --accent: #38bdf8;
+      --listening: #ef4444;
+      --thinking: #f59e0b;
+      --speaking: #10b981;
+      --warn: #fbbf24;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 12px 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    .sim-badge {
+      background: rgba(245, 158, 11, 0.16);
+      color: var(--warn);
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.82rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #1b263b;
+      border: 1px solid var(--border);
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    .dot.idle { background: var(--accent); }
+    .dot.listening { background: var(--listening); box-shadow: 0 0 8px var(--listening); }
+    .dot.thinking { background: var(--thinking); }
+    .dot.speaking { background: var(--speaking); box-shadow: 0 0 8px var(--speaking); }
+    .dot.error { background: var(--listening); }
+
+    main {
+      flex: 1;
+      max-width: 820px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .btn {
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn.ptt {
+      background: #0284c7;
+      border-color: #38bdf8;
+      font-weight: 600;
+      padding: 12px 20px;
+      font-size: 0.95rem;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .btn.ptt.recording {
+      background: #dc2626;
+      border-color: #f87171;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .chip {
+      background: #172234;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 11px;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .chip:hover { color: var(--text); border-color: var(--accent); }
+
+    .transcript-panel {
+      flex: 1;
+      min-height: 280px;
+      max-height: 55vh;
+      overflow-y: auto;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .turn {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #0f1623;
+      border: 1px solid var(--border);
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+    .turn .op {
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .turn .meta {
+      margin-top: 6px;
+      font-size: 0.74rem;
+      color: var(--muted);
+      word-break: break-word;
+    }
+    .text-form {
+      display: flex;
+      gap: 8px;
+    }
+    .text-form input {
+      flex: 1;
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.92rem;
+    }
+    .banner {
+      font-size: 0.8rem;
+      color: var(--warn);
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      border-radius: 8px;
+      padding: 8px 12px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span>AEGIS Voice V1</span>
+      <span class="sim-badge">SIMULATION ONLY · READ-ONLY</span>
+    </div>
+    <div class="status-pill">
+      <span id="stateDot" class="dot idle"></span>
+      <span id="stateLabel">Idle</span>
+      <span id="modeBadge" style="color: var(--muted);"></span>
+    </div>
+  </header>
+
+  <main>
+    <div id="warningBanner" class="banner"></div>
+
+    <div class="controls-bar">
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button id="pttBtn" class="btn ptt" type="button">Hold or Tap to Talk</button>
+        <button id="stopAudioBtn" class="btn" type="button">Stop Speaking</button>
+        <button id="muteBtn" class="btn" type="button">Audio: ON</button>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button id="resetCtxBtn" class="btn" type="button">Clear Context</button>
+      </div>
+    </div>
+
+    <div class="chips">
+      <button class="chip" data-q="AEGIS, what's our current situation?">Current situation</button>
+      <button class="chip" data-q="Explain the current plan.">Explain optimization</button>
+      <button class="chip" data-q="Where is Responder Alpha?">Where is Alpha?</button>
+      <button class="chip" data-q="Which casualties are unassigned?">Unassigned casualties</button>
+      <button class="chip" data-q="What changed recently?">Recent changes</button>
+      <button class="chip" data-q="Who hasn't acknowledged?">Acknowledgments</button>
+    </div>
+
+    <div id="transcriptPanel" class="transcript-panel">
+      <div class="turn">
+        <div class="op">AEGIS Voice Ready</div>
+        <div>Ask about simulation status, optimization rationale, responder locations, unassigned casualties, recent events, or acknowledgments. All approvals and dispatches remain manual in the dashboard.</div>
+      </div>
+    </div>
+
+    <form id="textForm" class="text-form">
+      <input id="textInput" type="text" maxlength="500" placeholder="Type a question or use Wispr Flow / Push-to-Talk..." autocomplete="off" />
+      <button class="btn" type="submit">Send</button>
+    </form>
+  </main>
+
+  <script>
+    const sessionId = "web-" + Math.random().toString(36).slice(2, 10);
+    let muted = false;
+    let currentAudio = null;
+    let mediaRecorder = null;
+    let chunks = [];
+    let recordStartMs = 0;
+    let isRecording = false;
+
+    const stateDot = document.getElementById("stateDot");
+    const stateLabel = document.getElementById("stateLabel");
+    const modeBadge = document.getElementById("modeBadge");
+    const warningBanner = document.getElementById("warningBanner");
+    const pttBtn = document.getElementById("pttBtn");
+    const stopAudioBtn = document.getElementById("stopAudioBtn");
+    const muteBtn = document.getElementById("muteBtn");
+    const resetCtxBtn = document.getElementById("resetCtxBtn");
+    const transcriptPanel = document.getElementById("transcriptPanel");
+    const textForm = document.getElementById("textForm");
+    const textInput = document.getElementById("textInput");
+
+    function setUiState(kind, label) {
+      stateDot.className = "dot " + kind;
+      stateLabel.textContent = label;
+    }
+
+    function showWarning(msg) {
+      if (!msg) {
+        warningBanner.style.display = "none";
+        warningBanner.textContent = "";
+        return;
+      }
+      warningBanner.textContent = msg;
+      warningBanner.style.display = "block";
+    }
+
+    function stopSpeaking() {
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
+      }
+      setUiState("idle", muted ? "Idle (Muted)" : "Idle");
+    }
+
+    function appendTurn(data) {
+      const div = document.createElement("div");
+      div.className = "turn";
+      const op = document.createElement("div");
+      op.className = "op";
+      op.textContent = "Operator: " + (data.user_transcript || "(audio)");
+      const ans = document.createElement("div");
+      ans.textContent = "AEGIS: " + data.display_text;
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      const traces = (data.trace_fields || []).join(", ");
+      meta.textContent = `intent=${data.intent} | mode=${data.delivery_mode} | read_only=${data.read_only} | trace=[${traces}]`;
+      div.appendChild(op);
+      div.appendChild(ans);
+      div.appendChild(meta);
+      transcriptPanel.appendChild(div);
+      transcriptPanel.scrollTop = transcriptPanel.scrollHeight;
+    }
+
+    async function playResponseAudio(data) {
+      if (muted || !data.audio_base64) {
+        setUiState("idle", muted ? "Idle (Muted)" : "Idle");
+        return;
+      }
+      stopSpeaking();
+      const mime = data.audio_mime_type || "audio/mpeg";
+      const audio = new Audio(`data:${mime};base64,${data.audio_base64}`);
+      currentAudio = audio;
+      setUiState("speaking", "Speaking...");
+      audio.onended = () => setUiState("idle", "Idle");
+      audio.onerror = () => {
+        showWarning("Browser audio playback failed; text transcript is shown above.");
+        setUiState("idle", "Idle");
+      };
+      try {
+        await audio.play();
+      } catch (err) {
+        showWarning("Autoplay blocked by browser policy; tap anywhere or read the transcript.");
+        setUiState("idle", "Idle");
+      }
+    }
+
+    async function sendTextQuery(text) {
+      stopSpeaking();
+      showWarning("");
+      setUiState("thinking", "Thinking...");
+      try {
+        const res = await fetch("/api/v1/voice/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "simulation",
+            session_id: sessionId,
+            text: text,
+            speak: !muted
+          })
+        });
+        const data = await res.json();
+        appendTurn(data);
+        if (data.warnings && data.warnings.length) {
+          showWarning(data.warnings.join(" | "));
+        }
+        await playResponseAudio(data);
+      } catch (err) {
+        setUiState("error", "Network Error");
+        showWarning("Could not reach AEGIS Voice server: " + err.message);
+      }
+    }
+
+    function pickSupportedAudioMime() {
+      if (typeof MediaRecorder === "undefined") return "";
+      const candidates = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/ogg;codecs=opus"
+      ];
+      for (const c of candidates) {
+        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) {
+          return c;
+        }
+      }
+      return "";
+    }
+
+    async function toggleRecording() {
+      if (isRecording) {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          mediaRecorder.stop();
+        }
+        return;
+      }
+      stopSpeaking();
+      showWarning("");
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showWarning("Microphone access requires HTTPS or localhost. Please use the text input below.");
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mime = pickSupportedAudioMime();
+        mediaRecorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        chunks = [];
+        recordStartMs = Date.now();
+        isRecording = true;
+        pttBtn.classList.add("recording");
+        pttBtn.textContent = "Release / Tap to Send";
+        setUiState("listening", "Listening...");
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        };
+        mediaRecorder.onstop = async () => {
+          isRecording = false;
+          pttBtn.classList.remove("recording");
+          pttBtn.textContent = "Hold or Tap to Talk";
+          stream.getTracks().forEach((t) => t.stop());
+          const durationS = Math.max(0.2, (Date.now() - recordStartMs) / 1000.0);
+          const blob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
+          if (blob.size < 64) {
+            setUiState("idle", "Idle");
+            showWarning("Recording was too short. Hold the button while speaking or use text input.");
+            return;
+          }
+          setUiState("thinking", "Transcribing & Thinking...");
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const b64 = String(reader.result).split(",")[1] || "";
+            try {
+              const res = await fetch("/api/v1/voice/audio-turn", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  mode: "simulation",
+                  session_id: sessionId,
+                  audio_base64: b64,
+                  mime_type: blob.type || "audio/webm",
+                  filename: (blob.type || "").includes("mp4") ? "recording.m4a" : "recording.webm",
+                  duration_seconds: Math.min(durationS, 20.0),
+                  speak: !muted
+                })
+              });
+              const data = await res.json();
+              appendTurn(data);
+              if (data.warnings && data.warnings.length) {
+                showWarning(data.warnings.join(" | "));
+              }
+              await playResponseAudio(data);
+            } catch (err) {
+              setUiState("error", "Error");
+              showWarning("Audio turn failed: " + err.message);
+            }
+          };
+          reader.readAsDataURL(blob);
+        };
+        mediaRecorder.start();
+      } catch (err) {
+        isRecording = false;
+        setUiState("error", "Mic Blocked");
+        showWarning("Microphone unavailable or permission denied. Use the text box below.");
+      }
+    }
+
+    pttBtn.addEventListener("click", () => toggleRecording());
+    stopAudioBtn.addEventListener("click", () => stopSpeaking());
+    muteBtn.addEventListener("click", () => {
+      muted = !muted;
+      muteBtn.textContent = muted ? "Audio: MUTED" : "Audio: ON";
+      if (muted) stopSpeaking();
+    });
+    resetCtxBtn.addEventListener("click", async () => {
+      stopSpeaking();
+      await fetch(`/api/v1/voice/session/${sessionId}/reset`, { method: "POST" });
+      showWarning("Conversation context cleared for this session (simulation state unchanged).");
+    });
+    textForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const val = textInput.value.trim();
+      if (!val) return;
+      textInput.value = "";
+      await sendTextQuery(val);
+    });
+    document.querySelectorAll(".chip").forEach((btn) => {
+      btn.addEventListener("click", () => sendTextQuery(btn.getAttribute("data-q")));
+    });
+
+    fetch("/health")
+      .then((r) => r.json())
+      .then((h) => {
+        modeBadge.textContent = `(${h.operational_mode})`;
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>

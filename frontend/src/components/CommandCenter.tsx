@@ -26,6 +26,7 @@ import { TasksPanel } from "./TasksPanel";
 import { Timeline } from "./Timeline";
 import { Button } from "./ui";
 import { VictimStrip } from "./VictimStrip";
+import { VoiceAssistantPanel } from "./VoiceAssistantPanel";
 
 const LINK: Record<LinkStatus, { label: string; color: string }> = {
   connecting: { label: "connecting", color: "var(--muted)" },
@@ -371,7 +372,7 @@ export function CommandCenter() {
         {/* primary viewport slot — top left, largest (the active feed is positioned over it) */}
         <div ref={slotRefs[0]} className="min-h-0" />
 
-        {/* right — secondary feed grid + comms */}
+        {/* right — secondary feed grid + Ask AEGIS voice assistant + Responder Comms */}
         <div className="row-span-1 flex min-h-0 flex-col gap-1.5">
           <div className="panel p-1.5">
             <div className="grid grid-cols-2 gap-1.5">
@@ -380,6 +381,7 @@ export function CommandCenter() {
               ))}
             </div>
           </div>
+          <VoiceAssistantPanel scenarioId={state.scenario_id} />
           <CommsPanel
             state={state}
             proposal={proposal}
