@@ -290,27 +290,38 @@ Each sign is an observation with a confidence and an explicit
 **Responder view** (`cv/monitor.py`, the default window with signs; **v**
 switches to the debug view with FPS, track states and publisher counters):
 
-- **A box beside each person.** It is tied to the person's chest by a line
-  and follows them. There is no side panel: the reading sits next to the body
-  it belongs to. The number and color match the dashboard track.
-- **Top line:** number, posture, and how long the person has been still.
-- **Eye row:** an open, closed or crossed-out eye with `EYES OPEN / CLOSED /
-  NOT VISIBLE`, and the response to a spoken command under it.
-- **Drop row:** `NO VISIBLE BLOOD` or `BLOOD: HEAD, L ARM`. The body regions
-  are outlined in amber on the person.
-- **Lungs row:** breaths per minute with a live chest trace, or why there is
-  no number yet (`MEASURING 6 s`, `CAMERA MUST BE STILL`, `PERSON MUST BE
-  STILL`, `CHEST NOT VISIBLE`).
-- **Colors:** white = observed; amber = notable observation (blood seen, no
-  chest motion, no response, eyes closed); grey = the camera cannot tell, with
-  the reason; cyan = listening after a command, with the time left. A trailing
-  `?` marks a low-confidence value.
-- **Placement:** a box goes to the side of its person where it covers no other
-  box and no face, and moves smoothly. Boxes shrink for more than 2 and more
-  than 4 people. People out of view keep a dimmed box for 5 s and are then
-  counted in the top bar.
+- **A card beside each person**, tied to the chest by a line in the person's
+  color, following them. The number, the card's left edge and the line share
+  that color (never amber or cyan), so it is clear which card is whose. Top
+  line: number (same as the dashboard), posture, and how long they have been
+  still.
+- **Four gauges in fixed places**, each with a fixed icon and label and one
+  short value: **breathing** (`16 /min`, or `NO MOTION` when no chest motion
+  is seen), **eyes** (`OPEN` / `CLOSED`), **response** to a spoken command
+  (`YES` / `NO`, `NOT ASKED` before the first command), **blood** (`NOT SEEN`
+  or the region, `HEAD +1`; the region is also outlined in amber on the body).
+- **The ring is the state:** white = observed; amber = notable observation
+  (no chest motion, eyes closed, no response, blood seen); dashed grey = the
+  camera cannot tell (a dash) or nothing was asked yet; cyan = in progress
+  (the breathing ring fills while it measures, the response ring drains while
+  it watches after a command). A trailing `?` marks a low confidence. When
+  breathing cannot be measured, one grey line says why ("Hold the camera
+  still to measure breathing", "Chest not visible").
+- **Placement:** a card goes beside its person where it covers no other card,
+  no one's chest point and as few faces and bodies as possible, and where its
+  line crosses no other line, card or face. It glides, and jumps rather than
+  crossing another card. Portrait pictures get dark side margins for the
+  cards. Cards shrink for more than 2 and more than 4 people. Someone who
+  leaves the picture keeps a small `NOT IN VIEW` chip (no line) for 5 s and
+  is then counted in the top bar.
+- **Design sources:** AFRL BATDOK (an icon per vital, a dash when missing)
+  and AR triage studies (ARTTS, ISMAR 2022; smart-glasses triage, JMIR 2019;
+  MXR-CDS Triage, MHSRS): one marker per casualty and as little to read as
+  possible, since every extra item costs responders time. Flat dark cards and
+  DIN signage type, nothing decorative.
 
-Text and icons are drawn with Pillow (`pillow` in `requirements.txt`).
+Text and icons are drawn with Pillow (`pillow` in `requirements.txt`), in DIN
+Alternate / DIN Condensed where macOS has them.
 
 Colors mark observations, never severity, and there is no heart rate: the
 brief excludes camera-based heart rate and a webcam at 2–3 m cannot measure it.
@@ -569,7 +580,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-172 tests. The suite covers:
+176 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.

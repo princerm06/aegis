@@ -4,9 +4,12 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from cv.monitor import (BOTTOM_MARGIN, BOX_H, BOX_W, MAX_VIEW_W, TOP_BAR, VIEW_H, Callout, CalloutLayout, Scene,
-                        box_scale, build_scene, identity_color, lines_for, render)
+from cv.monitor import UNKNOWN as UNKNOWN_VALUE
+from cv.monitor import (BOTTOM_MARGIN, BOX_H, BOX_W, CHIP_H, CHIP_W, HINT_H, MAX_VIEW_W, MIN_VIEW_W, TOP_BAR, VIEW_H,
+                        Callout, CalloutLayout, Scene, _anchor, _crosses, _inside, _leader_end, box_scale,
+                        build_scene, card_for, identity_color, render)
 from cv.observations import PostureEstimate
+from cv.signs.body import L_HIP, L_SHOULDER, NOSE, R_HIP, R_SHOULDER
 from cv.tests.test_signs import BBOX, CONF, KEYPOINTS, body_image, make_estimator, make_track
 
 FINDINGS = {
@@ -27,57 +30,64 @@ UNKNOWN = {
 }
 
 
-def texts(lines):
-    return [lines.movement.text, lines.eyes.text, lines.response.text, lines.blood.text, lines.breathing.text]
+def values(card):
+    return [card.movement.text] + [gauge.value for gauge in card.gauges]
 
 
-def test_findings_are_amber_and_everything_reads_as_plain_words():
-    lines = lines_for(FINDINGS)
-    assert texts(lines) == ["STILL 1:35 min", "EYES CLOSED", "NO RESPONSE", "BLOOD: TORSO, L LEG",
-                            "NO CHEST MOTION ?"]                   # 0.45 confidence gets the "?"
-    assert {line.state for line in (lines.eyes, lines.response, lines.blood, lines.breathing)} == {"attention"}
-    assert lines.movement.state == "observed" and lines.eye_icon == "closed"
-    assert not lines.breathing_rate and not lines.show_trace
+def test_findings_are_amber_and_each_gauge_has_one_short_value():
+    card = card_for(FINDINGS)
+    assert values(card) == ["STILL 1:35", "NO MOTION?", "CLOSED", "NO", "TORSO +1"]   # 0.45 breathing gets "?"
+    assert [g.label for g in card.gauges] == ["BREATHING", "EYES", "RESPONSE", "BLOOD"]
+    assert {g.state for g in card.gauges} == {"attention"} and card.movement.state == "observed"
+    assert card.eyes.icon == "closed" and card.blood.icon == "filled" and card.hint == ""
 
 
-def test_untestable_signs_are_grey_and_say_what_is_needed():
-    lines = lines_for(UNKNOWN)
-    assert texts(lines) == ["CAMERA MOVING", "EYES NOT VISIBLE", "NOT TESTED (CAMERA MOVING)",
-                            "BLOOD: BODY NOT VISIBLE", "CAMERA MUST BE STILL"]
-    assert {line.state for line in (lines.movement, lines.eyes, lines.response, lines.blood, lines.breathing)} \
-        == {"unknown"}
+def test_untestable_signs_show_a_dash_and_one_line_says_why():
+    card = card_for(UNKNOWN)
+    assert values(card) == ["CAMERA MOVING", UNKNOWN_VALUE, UNKNOWN_VALUE, UNKNOWN_VALUE, UNKNOWN_VALUE]
+    assert {g.state for g in card.gauges} == {"unknown"}
+    assert card.hint == "Hold the camera still to measure breathing"
     still = {**UNKNOWN, "movement": {"value": "still", "confidence": 0.9, "still_for_s": 3.0},
              "response": {"value": "not_tested", "confidence": 0.0},
              "breathing": {"value": "not_testable", "confidence": 0.0}}
-    assert lines_for(still).breathing.text == "CHEST NOT VISIBLE"
-    assert lines_for(still).response.text == "RESPONSE NOT TESTED"
-    measuring = lines_for(still, {"breathing_remaining_s": 6.2})
-    assert measuring.breathing.text == "MEASURING 6 s" and measuring.show_trace
-    assert lines_for(still, {"breathing_remaining_s": 0.0}).breathing.text == "NO CLEAR RHYTHM"
+    assert card_for(still).hint == "Chest not visible" and card_for(still).movement.text == "STILL 3 s"
+    assert (card_for(still).response.value, card_for(still).response.state) == ("NOT ASKED", "unknown")
+    asked = {**still, "response": {"value": "not_tested", "confidence": 0.0, "command_at": "2026-11-14T12:00:00Z"}}
+    assert card_for(asked).response.value == UNKNOWN_VALUE        # asked, but the person was not seen enough
+    measuring = card_for(still, {"breathing_remaining_s": 6.2, "breathing_needed_s": 9.0})
+    assert measuring.breathing.value == "6 s" and measuring.breathing.state == "active"
+    assert measuring.breathing.progress == pytest.approx(0.31, abs=0.01) and measuring.hint == ""
+    assert card_for(still, {"breathing_remaining_s": 0.0}).hint == "No clear breathing rhythm"
     moving = {**still, "movement": {"value": "moving", "confidence": 0.7, "still_for_s": 0.0}}
-    assert lines_for(moving).breathing.text == "PERSON MUST BE STILL" and lines_for(moving).movement.text == "MOVING"
+    assert card_for(moving).hint == "Breathing is measured while the person is still"
+    assert card_for(moving).movement.text == "MOVING"
 
 
 def test_breathing_rate_and_listening_countdown():
     signs = {**FINDINGS, "breathing": {"value": "motion_detected", "confidence": 0.7, "rate_bpm": 14.2},
-             "eyes": {"value": "open", "confidence": 0.9}}
-    lines = lines_for(signs, {"listening_left_s": 6.0, "command_window_s": 8.0})
-    assert lines.breathing.text == "14" and lines.breathing_rate and lines.show_trace
-    assert lines.breathing.state == "observed"               # a rate is never coloured by its value
-    assert lines.response.text == "LISTENING 6 s" and lines.response.state == "active"
-    assert lines.eyes.text == "EYES OPEN" and lines.eye_icon == "open"
+             "eyes": {"value": "open", "confidence": 0.9}, "visible_blood": {"value": "not_detected", "confidence": 0.8}}
+    card = card_for(signs, {"listening_left_s": 6.0, "command_window_s": 8.0})
+    assert (card.breathing.value, card.breathing.unit, card.breathing.state) == ("14", "/min", "observed")
+    assert card.response.value == "6 s" and card.response.state == "active"
+    assert card.response.progress == pytest.approx(0.75)          # the ring drains while listening
+    assert card.eyes.value == "OPEN" and card.blood.value == "NOT SEEN" and card.blood.state == "observed"
+    responded = card_for({**signs, "response": {"value": "responded", "confidence": 0.9}})
+    assert responded.response.value == "YES" and responded.response.state == "observed"
 
 
 def test_no_clinical_words_no_heart_rate_and_ascii_only():
     rate = {**FINDINGS, "breathing": {"value": "motion_detected", "confidence": 0.7, "rate_bpm": 31.0}}
     for signs in (FINDINGS, UNKNOWN, rate):
-        for text in texts(lines_for(signs)):
-            assert text.isascii()
+        card = card_for(signs)
+        texts = values(card) + [g.label for g in card.gauges] + [g.unit for g in card.gauges] + [card.hint]
+        for text in texts:
+            assert text.replace(UNKNOWN_VALUE, "").isascii()
             assert not re.search(r"severity|critical|immediate|diagnos|triage|priority|heart|pulse|bpm", text, re.I)
+    assert card_for(rate).breathing.state == "observed"           # a rate is never colored by its value
 
 
 def callout(number, signs=FINDINGS, in_view=True, context=None):
-    return Callout(f"s1-t{number}", number, identity_color(number), "LYING", in_view, lines_for(signs, context),
+    return Callout(f"s1-t{number}", number, identity_color(number), "LYING", in_view, card_for(signs, context),
                    blood_regions=("torso", "left_leg"))
 
 
@@ -97,13 +107,15 @@ def overlap(a, b):
                                           ((240, 640), 7), ((1280, 720), 14)])
 def test_render_fits_any_frame_and_any_number_of_people(size, people):
     image = np.full((*size, 3), 90, np.uint8)
-    scene = Scene([callout(n, in_view=n % 3 != 0) for n in range(1, people + 1)],
-                  {"s1-t1": np.sin(np.linspace(0, 12, 150))}, hidden=2)
+    scene = Scene([callout(n, UNKNOWN if n % 2 else FINDINGS, in_view=n % 3 != 0) for n in range(1, people + 1)],
+                  hidden=2)
     canvas = render(image, [track(n) for n in range(1, people + 1)], scene, None,
                     ["room-cam-1", "ROOM room-2"], ["UNCALIBRATED - not publishing"], "C command given")
     height, width = size
     factor = min(VIEW_H / height, MAX_VIEW_W / width)
-    assert canvas.shape == (round(height * factor), round(width * factor), 3)      # the picture only, no side panel
+    view_h, picture_w = round(height * factor), round(width * factor)
+    expected_w = max(picture_w, MIN_VIEW_W) if view_h >= MIN_VIEW_W * 0.75 else picture_w   # portrait: margins
+    assert canvas.shape == (view_h, expected_w, 3)                                     # no side panel
     assert canvas.dtype == np.uint8 and canvas[:TOP_BAR].mean() < 80               # top bar drawn
 
 
@@ -141,7 +153,7 @@ def test_a_box_follows_its_person_smoothly_and_is_forgotten_when_they_leave():
 
 def test_boxes_shrink_for_crowds_and_narrow_pictures():
     assert box_scale(1, 1280) == 1.0 and box_scale(3, 1280) == 0.85 and box_scale(9, 1280) == 0.72
-    assert box_scale(1, 405) == pytest.approx(0.73)
+    assert box_scale(1, 600) == pytest.approx(0.81)
     assert box_scale(1, 200) == 0.6                              # never unreadably small
 
 
@@ -170,9 +182,49 @@ def test_scene_comes_from_the_live_signs_and_hides_people_long_out_of_view():
     assert scene.hidden == 1 and [c.number for c in scene.callouts] == [1]
     (shown,) = scene.callouts
     assert (shown.posture, shown.blood_regions) == ("LYING", ("torso",))
-    assert shown.lines.eyes.text.startswith("EYES CLOSED") and shown.lines.blood.text.startswith("BLOOD: TORSO")
+    assert shown.card.eyes.value.startswith("CLOSED") and shown.card.blood.value.startswith("TORSO")
     gone.last_seen = 3.0                                       # out of view for 3 s: still shown, dimmed
     scene = build_scene([gone, seen], estimator, 6.0)
     assert scene.hidden == 0 and [c.in_view for c in scene.callouts] == [True, False]
     canvas = render(image, [gone, seen], scene)
     assert canvas.shape[0] == VIEW_H
+
+
+def test_a_card_grows_by_one_line_only_when_it_has_something_to_explain():
+    assert callout(1, FINDINGS).size == (BOX_W, BOX_H)
+    assert callout(1, UNKNOWN).size == (BOX_W, BOX_H + HINT_H)
+    assert callout(1, UNKNOWN, in_view=False).size == (CHIP_W, CHIP_H)     # no empty card for someone unseen
+
+
+def test_leaders_point_at_the_chest_even_from_weak_shoulders():
+    weak = CONF.copy()
+    weak[[L_SHOULDER, R_SHOULDER]] = 0.45                        # below the keypoint cutoff, still a pointer
+    person = SimpleNamespace(**{**vars(track(1)), "keypoint_conf": weak})
+    x, y = _anchor(person, 0.5)
+    shoulders = KEYPOINTS[[L_SHOULDER, R_SHOULDER]].mean(axis=0)
+    assert x == pytest.approx(shoulders[0], abs=25) and y > shoulders[1]           # below the shoulder line
+    assert y < KEYPOINTS[[L_HIP, R_HIP]].mean(axis=0)[1]
+    assert np.hypot(x - KEYPOINTS[NOSE][0], y - KEYPOINTS[NOSE][1]) > 20           # not the face
+
+
+def test_leader_lines_do_not_cross_and_cards_leave_chests_free():
+    # Three people lying side by side, as in an overhead shot: cards must not tangle their lines.
+    frame, size = (1280, 720), (BOX_W, BOX_H)
+    people = [(key, (300, y - 60, 900, y + 60), (600, y), None) for key, y in (("a", 160), ("b", 360), ("c", 560))]
+    placed = CalloutLayout().place(people, size, frame)
+    rects = {key: (x, y, x + BOX_W, y + BOX_H) for key, (x, y) in placed.items()}
+    lines = [(_leader_end(rects[key], anchor), anchor) for key, _, anchor, _ in people]
+    assert not any(_crosses(*lines[i], *lines[j]) for i in range(3) for j in range(i + 1, 3))
+    assert not any(_inside(anchor, rect, pad=0) for *_, anchor, _ in people for rect in rects.values())
+
+
+def test_a_card_never_glides_across_another_card():
+    layout = CalloutLayout()
+    size, frame = (BOX_W, BOX_H), (1280, 720)
+    a = ("a", (500, 300, 620, 700), (560, 360), None)
+    layout.place([a, ("b", (900, 300, 1020, 700), (960, 360), None)], size, frame)
+    for step in range(12):                          # b walks over to a, its card has to get past a's card
+        x = 900 - 40 * step
+        placed = layout.place([a, ("b", (x, 300, x + 120, 700), (x + 60, 360), None)], size, frame)
+        ra, rb = ((px, py, px + BOX_W, py + BOX_H) for px, py in (placed["a"], placed["b"]))
+        assert overlap(ra, rb) == 0, step

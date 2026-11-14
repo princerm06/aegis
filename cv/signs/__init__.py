@@ -130,6 +130,7 @@ class SignsEstimator:
         if breathing.started_t is not None:
             needed = self.settings.breathing_window_s * 0.6
             context["breathing_remaining_s"] = max(0.0, needed - (t - breathing.started_t))
+            context["breathing_needed_s"] = needed
             context["breathing_trace"] = chest_signal(breathing.times, breathing.displacement)
         return context
 
