@@ -269,6 +269,24 @@ class SimulationDispatch(ContractModel):
     real_device_effect: Literal[False] = False
 
 
+class RouteInvalidation(ContractModel):
+    """Advisory record: a dispatched route intersecting blocked map cells.
+
+    The dispatched assignment keeps its historical ``route`` unchanged.
+    ``alternative_route`` is a fresh A* suggestion on the current map revision
+    (or None when infeasible); it requires a new human approval and dispatch
+    and is never installed automatically."""
+
+    mode: SimulationMode = "simulation"
+    assignment_id: Identifier
+    casualty_id: Identifier
+    responder_id: Identifier
+    map_revision: Identifier
+    historical_map_revision: Identifier | None = None
+    blocked_cells: list[list[int]]
+    alternative_route: AStarRoute | None = None
+
+
 class SimulatedAssignment(ContractModel):
     mode: SimulationMode = "simulation"
     id: Identifier
@@ -284,6 +302,9 @@ class SimulatedAssignment(ContractModel):
     acknowledged_at: AwareDatetime | None = None
     completed_at: AwareDatetime | None = None
     device_event_ids: list[Identifier] = Field(default_factory=list)
+    route_status: Literal["current", "invalidated"] = "current"
+    invalidated_reason: str | None = None
+    invalidated_blocks: list[list[int]] | None = None
 
 
 class RecommendationState(ContractModel):
@@ -321,6 +342,7 @@ class SimulationState(ContractModel):
     approvals: list[SimulationApproval]
     dispatches: list[SimulationDispatch]
     assignments: list[SimulatedAssignment]
+    route_invalidations: list[RouteInvalidation] = Field(default_factory=list)
     last_recommendation: RecommendationState | None
 
 

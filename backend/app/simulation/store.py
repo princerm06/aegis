@@ -67,6 +67,7 @@ from backend.app.simulation.models import (
     RequiredCapabilitiesRequest,
     ResetRequest,
     ResponderUpdateRequest,
+    RouteInvalidation,
     SimulatedAssignment,
     SimulatedDeviceEvent,
     SimulateDeviceRequest,
@@ -138,6 +139,53 @@ def _camera_id(camera_id: str, local_id: str) -> str:
 
 def _map_fingerprint(scene_map: SceneMap) -> str:
     return _fingerprint(_dump(scene_map))
+
+
+def _blocked_cells_on_route(scene_map: SceneMap, route: Any) -> list[list[int]]:
+    """Sorted [col, row] cells where a historical route crosses blocked space.
+
+    Uses the same A* grid router (occupancy + obstacle polygons) that new
+    proposals use, over interpolated waypoints. Returns [] when the route or
+    grid is missing or geometry cannot be evaluated.
+    """
+    import math
+
+    if route is None or scene_map.occupancy_grid is None:
+        return []
+    grid = scene_map.occupancy_grid
+    try:
+        from optimization.routing import _GridRouter
+
+        router = _GridRouter(scene_map)
+    except ValueError:
+        return []
+    cells: set[tuple[int, int]] = set()
+    try:
+        for first, second in zip(route.waypoints, route.waypoints[1:]):
+            distance = math.hypot(second.x_m - first.x_m, second.y_m - first.y_m)
+            steps = max(1, math.ceil(distance / (grid.resolution_m / 4)))
+            for step in range(steps + 1):
+                fraction = step / steps
+                x = first.x_m + fraction * (second.x_m - first.x_m)
+                y = first.y_m + fraction * (second.y_m - first.y_m)
+                cells.add((math.floor((x - grid.origin.x_m) / grid.resolution_m),
+                           math.floor((y - grid.origin.y_m) / grid.resolution_m)))
+    except (ArithmeticError, ValueError):
+        return []
+    return [[col, row] for col, row in sorted(
+        cell for cell in cells if router._is_blocked(cell))]
+
+
+def _advisory_alternative(scene_map: SceneMap, start: Any, goal: Any) -> Any | None:
+    """Fresh A* route on the current map, or None when infeasible/invalid."""
+    try:
+        from optimization.routing import plan_route
+    except ImportError:
+        return None
+    try:
+        return plan_route(scene_map, start, goal)
+    except ValueError:
+        return None
 
 
 def _default_solver(request: Any) -> Any:
@@ -235,6 +283,7 @@ class _Session:
     approvals: dict[str, SimulationApproval] = field(default_factory=dict)
     dispatches: dict[str, SimulationDispatch] = field(default_factory=dict)
     assignments: dict[str, SimulatedAssignment] = field(default_factory=dict)
+    route_invalidations: list[RouteInvalidation] = field(default_factory=list)
     device_events: dict[str, SimulatedDeviceEvent] = field(default_factory=dict)
     map_revisions: dict[str, str] = field(default_factory=dict)
     cameras: dict[str, CameraRecord] = field(default_factory=dict)
@@ -1015,7 +1064,7 @@ class SimulationStore:
             for name in ("tracks", "casualty_tracks", "observation_fingerprints",
                          "responder_reported_at", "responder_preferences", "proposals",
                          "proposal_context", "approvals", "dispatches", "assignments",
-                         "device_events", "cameras"):
+                         "route_invalidations", "device_events", "cameras"):
                 getattr(session, name).clear()
             session.resolved.clear()
             session.map_revisions = ({scenario.scene_map.revision: _map_fingerprint(scenario.scene_map)}
@@ -1314,7 +1363,7 @@ class SimulationStore:
             assert session.meta is not None
             if scene_map.frame_id != session.meta.frame_id:
                 raise _invalid("Map frame_id must match the scenario frame")
-            result = {"map_revision": scene_map.revision}
+            result: dict[str, Any] = {"map_revision": scene_map.revision}
             current = session.scene_map
             if current is not None and current == scene_map:
                 return result, None, True
@@ -1327,9 +1376,73 @@ class SimulationStore:
             session.emit("simulation.map_updated",
                          {"previous_revision": current.revision if current else None,
                           "scene_map": _dump(scene_map)}, now)
+            invalidated, cleared = self._refresh_route_invalidations(session, now)
+            result["invalidated_assignment_ids"] = invalidated
+            result["revalidated_assignment_ids"] = cleared
             return result, f"map:{scene_map.revision}", False
 
         return self._run(session, "map_update", _dump(scene_map), apply, idempotency_key)
+
+    @staticmethod
+    def _refresh_route_invalidations(session: _Session,
+                                     now: datetime) -> tuple[list[str], list[str]]:
+        """Flag active dispatched routes crossing blocked cells on the new map.
+
+        Historical ``route`` bytes are never rewritten; only ``route_status``
+        markers and the advisory ``route_invalidations`` list change. Returns
+        (newly_invalidated_ids, newly_cleared_ids).
+        """
+        assert session.scene_map is not None
+        previous = {entry.assignment_id: entry for entry in session.route_invalidations}
+        invalidations: list[RouteInvalidation] = []
+        for record in session.assignments.values():
+            if record.status == "completed" or record.route is None:
+                if record.route_status != "current":
+                    record.route_status = "current"
+                    record.invalidated_reason = None
+                    record.invalidated_blocks = None
+                continue
+            blocked = _blocked_cells_on_route(session.scene_map, record.route)
+            if blocked:
+                record.route_status = "invalidated"
+                record.invalidated_reason = f"route_blocked:{session.scene_map.revision}"
+                record.invalidated_blocks = [cell[:] for cell in blocked]
+                responder = session.responders.get(record.responder_id)
+                casualty = session.casualties.get(record.casualty_id)
+                alternative = None
+                if responder is not None and casualty is not None:
+                    alternative = _advisory_alternative(
+                        session.scene_map, responder.position, casualty.position)
+                invalidations.append(RouteInvalidation(
+                    assignment_id=record.id, casualty_id=record.casualty_id,
+                    responder_id=record.responder_id,
+                    map_revision=session.scene_map.revision,
+                    historical_map_revision=record.route.map_revision,
+                    blocked_cells=[cell[:] for cell in blocked],
+                    alternative_route=alternative,
+                ))
+            elif record.route_status == "invalidated":
+                record.route_status = "current"
+                record.invalidated_reason = None
+                record.invalidated_blocks = None
+        session.route_invalidations = invalidations
+        current_ids = {entry.assignment_id for entry in invalidations}
+        previous_ids = set(previous)
+        changed = (current_ids != previous_ids or any(
+            previous[entry.assignment_id].blocked_cells != entry.blocked_cells
+            for entry in invalidations if entry.assignment_id in previous))
+        if invalidations and changed:
+            session.emit("simulation.route_invalidated", {
+                "map_revision": session.scene_map.revision,
+                "assignment_ids": sorted(current_ids),
+                "invalidations": [_dump(entry) for entry in invalidations],
+            }, now)
+        elif previous_ids - current_ids:
+            session.emit("simulation.route_revalidated", {
+                "map_revision": session.scene_map.revision,
+                "assignment_ids": sorted(previous_ids - current_ids),
+            }, now)
+        return sorted(current_ids - previous_ids), sorted(previous_ids - current_ids)
 
     def set_required_capabilities(self, scenario_id: str, casualty_id: str,
                                   request: RequiredCapabilitiesRequest,
@@ -1574,6 +1687,11 @@ class SimulationStore:
             responder = session.responders[record.responder_id]
             responder.status = session.responder_preferences.pop(record.responder_id, "available")
             session.resolved.add(record.casualty_id)
+            record.route_status = "current"
+            record.invalidated_reason = None
+            record.invalidated_blocks = None
+            session.route_invalidations = [entry for entry in session.route_invalidations
+                                           if entry.assignment_id != record.id]
             session.emit("simulation.responder_released",
                          {"responder_id": responder.id, "status": responder.status,
                           "assignment_id": record.id}, now)
@@ -1610,6 +1728,8 @@ class SimulationStore:
             approvals=[a.model_copy(deep=True) for a in session.approvals.values()],
             dispatches=[d.model_copy(deep=True) for d in session.dispatches.values()],
             assignments=[a.model_copy(deep=True) for a in session.assignments.values()],
+            route_invalidations=[entry.model_copy(deep=True)
+                                 for entry in session.route_invalidations],
             last_recommendation=(session.last_recommendation.model_copy(deep=True)
                                  if session.last_recommendation else None),
         )

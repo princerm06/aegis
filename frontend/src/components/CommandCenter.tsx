@@ -6,8 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { fallbackState } from "@/lib/fallback";
 import { useFieldNotes } from "@/lib/fieldNotes";
-import { responderName } from "@/lib/format";
+import { responderName, shortId } from "@/lib/format";
 import { proposalDiff } from "@/lib/insights";
+import { getInvalidatedAssignments } from "@/lib/routeInvalidation";
 import { useDeviceStatus, usePreviewFlags, useSensorVitals } from "@/lib/preview";
 import { buildReport, download } from "@/lib/report";
 import type { ActionResponse, SceneMap as SceneMapT, SimulationApproval, SimulationProposal } from "@/lib/types";
@@ -62,6 +63,7 @@ export function CommandCenter() {
 
   const proposal = state?.current_proposal_id ? state.proposals.find((p) => p.id === state.current_proposal_id) ?? null : null;
   const diff = useMemo(() => (state ? proposalDiff(state, proposal) : null), [state, proposal]);
+  const invalidatedRoutes = useMemo(() => (state ? getInvalidatedAssignments(state) : []), [state]);
   const { alerts, dismiss, muted, toggleMute, flashing } = useAlerts(fallback ? null : sim.state, events, proposal, now);
 
   useEffect(() => {
@@ -308,7 +310,7 @@ export function CommandCenter() {
                 flashing={flashing}
               />
             </div>
-            {primary && <MapLegend ghost={!!diff?.ghostRoutes.length} />}
+            {primary && <MapLegend ghost={!!diff?.ghostRoutes.length} invalidated={invalidatedRoutes.length > 0} />}
           </section>
   );
 
@@ -355,6 +357,31 @@ export function CommandCenter() {
           Reset
         </Button>
       </header>
+
+      {invalidatedRoutes.length > 0 && (
+        <div
+          role="alert"
+          className="flex items-center gap-3 rounded border border-danger/70 bg-tone-danger px-3 py-1.5 text-[12px]"
+        >
+          <span className="mono text-[13px] font-bold tracking-[0.08em] text-danger">
+            ROUTE INVALIDATED — REPLAN REQUIRED
+          </span>
+          <span className="min-w-0 flex-1 truncate text-danger-text">
+            {invalidatedRoutes
+              .map(
+                ({ assignment, blockedCells }) =>
+                  `${responderName(state, assignment.responder_id)} → ${shortId(assignment.casualty_id)} blocked at ${blockedCells
+                    .map(([c, r]) => `(${c}, ${r})`)
+                    .join(", ")}`,
+              )
+              .join(" · ")}
+            {" — dispatched route kept as history, not safe navigation. A revised route needs fresh approval."}
+          </span>
+          <Button size="sm" variant="danger" disabled={busy} onClick={replan} className="shrink-0">
+            {pending === "Replan" ? "Computing…" : "Replan now"}
+          </Button>
+        </div>
+      )}
 
       {(fallback || previewOn) && (
         <div className="sim-stripe flex items-center gap-3 rounded border border-warn/50 px-3 py-0.5 text-[11px] text-warn">
@@ -502,7 +529,7 @@ function Logo() {
   );
 }
 
-function MapLegend({ ghost }: { ghost: boolean }) {
+function MapLegend({ ghost, invalidated }: { ghost: boolean; invalidated?: boolean }) {
   const item = (el: React.ReactNode, text: string) => (
     <span className="flex items-center gap-1">
       {el}
@@ -516,6 +543,9 @@ function MapLegend({ ghost }: { ghost: boolean }) {
       {item(<span className="h-2 w-2 rounded-sm border-2 border-accent" />, "firefighter")}
       {item(<span className="w-3.5 border-t-2 border-dashed border-accent" />, "proposed")}
       {item(<span className="w-3.5 border-t-2 border-warn" />, "dispatched")}
+      {item(<span className="w-3.5 border-t-2 border-dashed border-warn opacity-60" />, "historical")}
+      {invalidated && item(<span className="w-3.5 border-t-2 border-dashed border-danger" />, "invalidated")}
+      {item(<span className="w-3.5 border-t-2 border-dashed border-info" />, "alternative*")}
       {item(<span className="w-3.5 border-t-2 border-ok" />, "ack'd")}
       {ghost && item(<span className="w-3.5 border-t border-dotted border-muted" />, "previous plan")}
       {item(<span className="h-2 w-2 border border-dashed border-warn" />, "CV detection")}

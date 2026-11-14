@@ -224,6 +224,18 @@ export interface SimulationDispatch {
 
 export type AssignmentStatus = "dispatched" | "delivered" | "acknowledged" | "completed";
 
+/** Advisory: a dispatched route crossing blocked cells. Historical route kept. */
+export interface RouteInvalidation {
+  mode: "simulation";
+  assignment_id: string;
+  casualty_id: string;
+  responder_id: string;
+  map_revision: string;
+  historical_map_revision?: string | null;
+  blocked_cells: [number, number][];
+  alternative_route?: AStarRoute | null;
+}
+
 export interface SimulatedAssignment {
   mode: "simulation";
   id: string;
@@ -239,6 +251,9 @@ export interface SimulatedAssignment {
   acknowledged_at?: ISODate | null;
   completed_at?: ISODate | null;
   device_event_ids: string[];
+  route_status?: "current" | "invalidated";
+  invalidated_reason?: string | null;
+  invalidated_blocks?: [number, number][] | null;
 }
 
 export interface RecommendationState {
@@ -272,6 +287,7 @@ export interface SimulationState {
   approvals: SimulationApproval[];
   dispatches: SimulationDispatch[];
   assignments: SimulatedAssignment[];
+  route_invalidations?: RouteInvalidation[];
   last_recommendation: RecommendationState | null;
 }
 
