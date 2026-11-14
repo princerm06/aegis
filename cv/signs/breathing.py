@@ -103,19 +103,29 @@ def _peak(signal, settings) -> tuple[float, float]:
     return float(power[peak] / max(power[rest].mean(), 1e-12)), float(freqs[peak] * 60.0)
 
 
-def estimate_rate(times, displacement, settings) -> dict:
-    """Breathing observation from a chest displacement series (pixels)."""
+def chest_signal(times, displacement) -> np.ndarray | None:
+    """Detrended chest displacement along its main axis at RESAMPLE_HZ; None if too short."""
     times = np.asarray(times, dtype=float)
     series = np.asarray(displacement, dtype=float)
-    duration = times[-1] - times[0]
+    if len(times) < 2:
+        return None
     grid = np.arange(times[0], times[-1], 1.0 / RESAMPLE_HZ)
     if len(grid) < 32:
-        return {"value": "not_testable", "confidence": 0.0}
+        return None
     resampled = np.column_stack([np.interp(grid, times, series[:, i]) for i in range(2)])
     resampled -= resampled.mean(axis=0)
     _, _, axes = np.linalg.svd(resampled, full_matrices=False)
-    signal = resampled @ axes[0]
-    signal -= np.polyval(np.polyfit(grid - grid[0], signal, 1), grid - grid[0])
+    axis = axes[0] if axes[0][np.argmax(np.abs(axes[0]))] >= 0 else -axes[0]  # stable sign for display
+    signal = resampled @ axis
+    return signal - np.polyval(np.polyfit(grid - grid[0], signal, 1), grid - grid[0])
+
+
+def estimate_rate(times, displacement, settings) -> dict:
+    """Breathing observation from a chest displacement series (pixels)."""
+    signal = chest_signal(times, displacement)
+    if signal is None:
+        return {"value": "not_testable", "confidence": 0.0}
+    duration = float(times[-1] - times[0])
     amplitude = float(np.ptp(signal))
     if amplitude < settings.breathing_min_amplitude_px:
         return {"value": "no_motion_detected", "confidence": 0.45}

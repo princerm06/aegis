@@ -111,8 +111,8 @@ def run(args: argparse.Namespace) -> dict:
 
     from cv.clock import Timebase
     from cv.detector import Detector
-    from cv.overlay import draw_tracks
-    from cv.signs import SignsEstimator, describe
+    from cv.monitor import build_cards, render
+    from cv.signs import SignsEstimator
     from cv.tracker import TrackManager
 
     expected = parse_expect(args.expect)
@@ -134,8 +134,6 @@ def run(args: argparse.Namespace) -> dict:
     timebase = Timebase(monotonic=lambda: 0.0, wall=lambda: datetime(2000, 1, 1, tzinfo=timezone.utc))
     signs = SignsEstimator(settings.signs, timebase.iso, settings.tracking.keypoint_min_conf)
     writer = None
-    if args.save_video:
-        writer = cv2.VideoWriter(args.save_video, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
     commands = sorted(args.command_at)
     samples: dict[str, list[tuple[float, dict]]] = {}
     seen_s: Counter = Counter()
@@ -161,12 +159,13 @@ def run(args: argparse.Namespace) -> dict:
             if t >= next_sample.get(track.track_id, 0.0):
                 next_sample[track.track_id] = t + args.step
                 samples.setdefault(track.track_id, []).append((t, signs.snapshot(track, t)))
-        if writer is not None:
-            extra = {tr.track_id: describe(signs.snapshot(tr, t), signs.listening(tr.track_id))
-                     for tr in tracks if tr.track_id in signs.states}
-            canvas = image.copy()
-            draw_tracks(canvas, tracks, settings.tracking.keypoint_min_conf, extra)
-            cv2.putText(canvas, f"t={t:5.1f}s", (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        if args.save_video:
+            cards, hidden = build_cards(tracks, signs, t)
+            canvas = render(image, tracks, cards, [f"t = {t:5.1f} s"], hidden=hidden,
+                            keypoint_min_conf=settings.tracking.keypoint_min_conf)
+            if writer is None:
+                writer = cv2.VideoWriter(args.save_video, cv2.VideoWriter_fourcc(*"mp4v"), fps,
+                                         (canvas.shape[1], canvas.shape[0]))
             writer.write(canvas)
         index += 1
     capture.release()

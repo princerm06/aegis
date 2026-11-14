@@ -21,6 +21,9 @@ _LIMB_CHAINS = {
 }
 
 
+LIMB_CHAINS = _LIMB_CHAINS
+
+
 def confident(keypoint_conf, indices, min_conf: float) -> bool:
     return keypoint_conf is not None and all(keypoint_conf[i] >= min_conf for i in indices)
 

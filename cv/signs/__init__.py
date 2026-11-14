@@ -13,7 +13,7 @@ from typing import Callable, Sequence
 
 from cv.settings import MODELS_DIR, SignsSettings, resolve
 from cv.signs.blood import BloodEstimator, BloodState
-from cv.signs.breathing import BreathingEstimator, BreathingState
+from cv.signs.breathing import BreathingEstimator, BreathingState, chest_signal
 from cv.signs.camera_motion import CameraMotionEstimator, CameraMotionState
 from cv.signs.eyes import EyeEstimator, EyeState, FaceScorer
 from cv.signs.motion import IMAGE_FRAME, MotionEstimator, MotionState
@@ -111,6 +111,22 @@ class SignsEstimator:
                 if name in signs and signs[name]["value"] in ("not_testable", "not_tested"):
                     signs[name] = {**signs[name], "reason": "camera_moving"}
         return signs
+
+    def display_context(self, track_id: str, t: float) -> dict:
+        """Display-only detail for the responder view (cv/monitor.py); never sent."""
+        state = self.states.get(track_id)
+        if state is None:
+            return {}
+        context: dict = {"command_window_s": self.settings.command_window_s}
+        if state.motion.response == "pending" and state.motion.command_t is not None:
+            context["listening_left_s"] = max(0.0, self.settings.command_window_s
+                                              - (t - state.motion.command_t))
+        breathing = state.breathing
+        if breathing.started_t is not None:
+            needed = self.settings.breathing_window_s * 0.6
+            context["breathing_remaining_s"] = max(0.0, needed - (t - breathing.started_t))
+            context["breathing_trace"] = chest_signal(breathing.times, breathing.displacement)
+        return context
 
     def listening(self, track_id: str) -> bool:
         state = self.states.get(track_id)

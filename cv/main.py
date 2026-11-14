@@ -7,7 +7,7 @@ camera observations to the backend at ``publisher.rate_hz``.
     python -m cv.main --config cv/config/phone.yaml    # phone, predefined zones
     python -m cv.main --mock-backend                   # print JSON instead of sending
     python -m cv.main --source clip.mp4 --loop         # replay a recording
-    python -m cv.main --signs                          # also observe signs (press c = command given)
+    python -m cv.main --signs                          # responder view with signs (c = command given, v = debug view)
     python -m cv.main --config cv/config/rooms.yaml --room room-2    # fixed camera, no calibration
     python -m cv.main --config cv/config/bodycam.yaml  # moving camera; keys 1-9 = current room
 
@@ -204,6 +204,12 @@ def run(args: argparse.Namespace) -> int:
     signal.signal(signal.SIGINT, request_stop)
     signal.signal(signal.SIGTERM, request_stop)
 
+    view = "responder" if signs is not None else "debug"
+    if not args.no_display:
+        import cv2
+
+        cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+
     started = timebase.now()
     run_at = iso_utc(timebase.to_wall(started))
     publish_period = 1.0 / max(0.1, settings.publisher.rate_hz)
@@ -268,9 +274,11 @@ def run(args: argparse.Namespace) -> int:
 
             if not args.no_display and frame is not None:
                 key = show(frame.image, tracks, tracker, calibration, zone_map, camera, publisher,
-                           fps, detector, settings, args, mapping_error, signs, now)
+                           fps, detector, settings, args, mapping_error, signs, now, view)
                 if key in (ord("q"), 27):
                     break
+                if key == ord("v") and signs is not None:
+                    view = "debug" if view == "responder" else "responder"
                 if key == ord("c") and signs is not None:
                     signs.mark_command(now)
                     log.info("Command marked: watching for responses for %.0f s",
@@ -300,10 +308,63 @@ def run(args: argparse.Namespace) -> int:
 
 
 def show(image, tracks, tracker, calibration, zone_map, camera, publisher, fps, detector,
-         settings, args, mapping_error, signs=None, now: float = 0.0) -> int:
-    """Draw the debug window; returns the key pressed (or 255)."""
+         settings, args, mapping_error, signs=None, now: float = 0.0, view: str = "debug") -> int:
+    """Draw the window (responder view or debug view); returns the key pressed (or 255)."""
     import cv2
 
+    pub = publisher.status() if publisher else None
+    warnings = []
+    if pub is not None and pub["backing_off"]:
+        warnings.append(f"BACKEND: {pub['last_error'][:90]}")
+    if zone_map is None and calibration is None:
+        warnings.append(mapping_error or "UNCALIBRATED - not publishing")
+    if camera.is_file:
+        warnings.append("REPLAY (recorded clip)" + (f" loop {camera.loops}" if args.loop else ""))
+    if view == "responder" and signs is not None:
+        canvas = responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs, now, warnings)
+    else:
+        canvas = debug_view(image, tracks, tracker, calibration, zone_map, camera, pub, fps, detector,
+                            settings, args, signs, now, warnings)
+    cv2.imshow(WINDOW, canvas)
+    fit_window(canvas.shape[1], canvas.shape[0])
+    return cv2.waitKey(1) & 0xFF
+
+
+_window_size: tuple[int, int] | None = None
+
+
+def fit_window(width: int, height: int, max_width: int = 1400) -> None:
+    """Keep the resizable window at the canvas's shape, no wider than a laptop screen."""
+    global _window_size
+    if _window_size != (width, height):
+        import cv2
+
+        _window_size = (width, height)
+        scale = min(1.0, max_width / width)
+        cv2.resizeWindow(WINDOW, int(width * scale), int(height * scale))
+
+
+def responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs, now, warnings):
+    from cv.monitor import build_cards, render
+
+    status = [settings.publisher.camera_id]
+    keys = "C command given | V debug view | Q quit"
+    if tracker.current_zone is not None:
+        status.append(f"ROOM {tracker.current_zone}")
+        keys = f"1-{min(9, len(zone_map.zones))} room | " + keys
+    if signs.camera_state is not None:
+        status.append(f"camera {signs.camera_motion}")
+    if pub is None:
+        status.append("not sending")
+    else:
+        status.append("MOCK" if args.mock_backend else
+                      ("backend offline" if pub["backing_off"] else "backend OK"))
+    cards, hidden = build_cards(tracks, signs, now)
+    return render(image, tracks, cards, status, warnings, keys, settings.tracking.keypoint_min_conf, hidden)
+
+
+def debug_view(image, tracks, tracker, calibration, zone_map, camera, pub, fps, detector,
+               settings, args, signs, now, warnings):
     from cv.overlay import draw_calibration, draw_hud, draw_minimap, draw_tracks, draw_zones
 
     canvas = image.copy()
@@ -318,14 +379,12 @@ def show(image, tracks, tracker, calibration, zone_map, camera, publisher, fps, 
                  for t in tracks if t.track_id in signs.states}
     draw_tracks(canvas, tracks, settings.tracking.keypoint_min_conf, extra)
     draw_minimap(canvas, tracks, calibration)
-    pub = publisher.status() if publisher else None
     mapping = "zones" if zone_map is not None else "calibrated"
     hud = [
         f"{fps:5.1f} FPS | {settings.detector.model} ({detector.device}) | {camera.label}",
         f"{settings.publisher.camera_id} ({mapping}) | tracks {len(tracks)} | "
         f"untracked dets {tracker.untracked} | retired {tracker.retired_total}",
     ]
-    warnings = []
     if tracker.current_zone is not None:
         room = zone_map.get(tracker.current_zone)
         hud.append(f"ROOM {room.zone_id} -> map ({room.x_m:g}, {room.y_m:g}) | "
@@ -335,25 +394,18 @@ def show(image, tracks, tracker, calibration, zone_map, camera, publisher, fps, 
         hud.append(f"{mode}: accepted {pub['accepted']} rejected {pub['rejected']} "
                    f"pending {pub['pending']} net-err {pub['network_errors']}"
                    + (f" | {pub['latency_ms_median']} ms" if pub["latency_ms_median"] else ""))
-        if pub["backing_off"]:
-            warnings.append(f"BACKEND: {pub['last_error'][:90]}")
-    if zone_map is None and calibration is None:
-        warnings.append(mapping_error or "UNCALIBRATED - not publishing")
-    if camera.is_file:
-        warnings.append("REPLAY (recorded clip)" + (f" loop {camera.loops}" if args.loop else ""))
     if signs is not None:
-        hud.append("signs: observations, not a diagnosis | c = command given"
+        hud.append("signs: observations, not a diagnosis | c = command given | v = responder view"
                    + (" | SENDING" if settings.publisher.send_signs else " | not sent"))
         if signs.camera_state is not None:
-            camera = signs.camera_motion
+            motion = signs.camera_motion
             speed = signs.camera_state.speed_px_s
-            hud.append(f"camera {camera}" + (f" ({speed:.0f} px/s)" if speed is not None else "")
+            hud.append(f"camera {motion}" + (f" ({speed:.0f} px/s)" if speed is not None else "")
                        + {"moving": ": movement, response and breathing paused",
                           "steady": ": movement relative to the body; no breathing",
-                          "unknown": ": too little background; no breathing"}.get(camera, ""))
+                          "unknown": ": too little background; no breathing"}.get(motion, ""))
     draw_hud(canvas, hud, warnings)
-    cv2.imshow(WINDOW, canvas)
-    return cv2.waitKey(1) & 0xFF
+    return canvas
 
 
 def _percentile(values: list[float], q: float) -> float | None:

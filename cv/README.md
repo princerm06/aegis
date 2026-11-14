@@ -118,7 +118,7 @@ publishes nothing and shows `UNCALIBRATED`. Tunables live in
 `config/pipeline.yaml`, `config/phone.yaml` and `config/bytetrack.yaml`;
 unknown keys are rejected.
 
-**Debug window:**
+**Debug window** (with `--signs` the responder view opens instead; **v** switches):
 
 - Boxes and skeletons, with the track ID, state, whether the person was seen
   this frame, confidence and posture.
@@ -278,8 +278,29 @@ python -m cv.main --send-signs           # also send them (backend must accept "
 ```
 
 Each sign is an observation with a confidence and an explicit
-`not_testable` / `not_tested`, shown under the track in the window. Wire
-format and backend asks: `CONTRACT_PROPOSAL.md`.
+`not_testable` / `not_tested`. Wire format and backend asks:
+`CONTRACT_PROPOSAL.md`.
+
+**Responder view** (`cv/monitor.py`, the default window with signs; **v**
+switches to the debug view with FPS, track states and publisher counters):
+
+- **Video:** each person has a numbered tag and corner marks in their own
+  color. Body regions where blood is seen are outlined in amber.
+- **Cards:** one per person, same number and color, in ID order so they never
+  jump. Rows follow the order responders check: blood, breathing (rate and a
+  live chest trace), response, eyes, movement.
+- **Colors:** amber = look at this (blood seen, no chest motion, no response,
+  eyes closed); teal dot = observed; grey = the camera cannot tell, with what
+  is needed ("camera must be still", "face not visible", "press C after a
+  command", "measuring, 6 s"); cyan = listening after a command, with the time
+  left. The bar is the detector confidence.
+- **Crowds:** more than 4 people switch to one-line cards listing only the
+  flagged findings. People out of view for over 5 s are counted, not shown.
+
+Colors mark observations, never severity, and there is no heart rate: the
+brief excludes camera-based heart rate and a webcam at 2–3 m cannot measure it.
+A pulse would need a contact sensor on the casualty. `signs_report
+--save-video` writes this same view.
 
 | Sign | How | Needs |
 | --- | --- | --- |
@@ -450,7 +471,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-143 tests. The suite covers:
+153 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.
@@ -470,6 +491,8 @@ python -m pytest cv/tests
   level face crops for sideways faces, signs sent only on visible reports.
 - Fake casualties: the scripted timeline, and the whole scene accepted by the
   in-process backend.
+- Responder view: row order, amber findings, grey reasons, listening
+  countdown, no clinical words or heart rate, any frame size and crowd size.
 - Rooms and bodycam: camera still / steady / moving / unknown from the
   background (a moving person is not camera motion), camera sway not counted
   as movement while a raised hand still counts as a response, a moving camera
