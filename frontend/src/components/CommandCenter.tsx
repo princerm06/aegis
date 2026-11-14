@@ -21,6 +21,8 @@ import { CommsPanel } from "./CommsPanel";
 import { LoopStrip } from "./LoopStrip";
 import { AlertStack, SettingsMenu, ShortcutHelp } from "./Overlays";
 import { ProposalPanel } from "./ProposalPanel";
+import { NeuralIntelligencePanel } from "./NeuralIntelligencePanel";
+import { useNeuralComparison } from "@/lib/useNeuralComparison";
 import { SceneMap } from "./SceneMap";
 import { TasksPanel } from "./TasksPanel";
 import { Timeline } from "./Timeline";
@@ -62,6 +64,27 @@ export function CommandCenter() {
 
   const proposal = state?.current_proposal_id ? state.proposals.find((p) => p.id === state.current_proposal_id) ?? null : null;
   const diff = useMemo(() => (state ? proposalDiff(state, proposal) : null), [state, proposal]);
+  const neural = useNeuralComparison(state, link);
+
+  const neuralBadge = useMemo(() => {
+    if (link === "offline") return <span className="mono text-[9.5px] text-danger">⚡ offline</span>;
+    if (!neural.comparison) return null;
+    if (neural.comparison.status === "disabled") return <span className="mono text-[9.5px] text-muted">⚡ shadow off</span>;
+    if (neural.isStale || neural.comparison.status === "stale") return <span className="mono text-[9.5px] text-warn">⚡ neural stale</span>;
+    if (neural.comparison.status === "available") {
+      const agrees = neural.comparison.disagreement_analysis?.models_agree_with_ortools;
+      return (
+        <button
+          onClick={() => setDrawer(true)}
+          className="mono text-[10px] text-accent hover:underline flex items-center gap-1 mr-1.5"
+          title="Open Neural Optimization Intelligence Details"
+        >
+          <span>⚡ {agrees ? "3-model agree" : "GNN alt plan"}</span>
+        </button>
+      );
+    }
+    return null;
+  }, [link, neural.comparison, neural.isStale]);
   const { alerts, dismiss, muted, toggleMute, flashing } = useAlerts(fallback ? null : sim.state, events, proposal, now);
 
   useEffect(() => {
@@ -372,7 +395,7 @@ export function CommandCenter() {
         {/* primary viewport slot — top left, largest (the active feed is positioned over it) */}
         <div ref={slotRefs[0]} className="min-h-0" />
 
-        {/* right — secondary feed grid + Ask AEGIS voice assistant + Responder Comms */}
+        {/* right — secondary feed grid + comms */}
         <div className="row-span-1 flex min-h-0 flex-col gap-1.5">
           <div className="panel p-1.5">
             <div className="grid grid-cols-2 gap-1.5">
@@ -424,6 +447,7 @@ export function CommandCenter() {
           onDispatch={dispatch}
           onReplan={replan}
           onOpenDetails={() => setDrawer(true)}
+          neuralSummary={neuralBadge}
         />
 
         {/* Feed layer: every feed stays mounted in a fixed DOM order; a swap only moves it over another slot. */}
@@ -452,14 +476,23 @@ export function CommandCenter() {
 
       {drawer && (
         <div className="fixed inset-0 z-40 flex justify-end bg-black/50" onClick={() => setDrawer(false)}>
-          <aside className="scrollbar-thin flex h-full w-[440px] flex-col gap-2 overflow-y-auto border-l border-line bg-bg p-2" onClick={(e) => e.stopPropagation()}>
+          <aside className="scrollbar-thin flex h-full w-full sm:w-[540px] md:w-[680px] flex-col gap-2.5 overflow-y-auto border-l border-line bg-bg p-2.5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-1">
-              <span className="label !text-text">Details</span>
+              <span className="label !text-text">Details & Optimization Intelligence</span>
               <button onClick={() => setDrawer(false)} className="text-muted hover:text-text" aria-label="Close">
                 ✕
               </button>
             </div>
             <ProposalPanel state={state} proposal={proposal} pending={pending} now={now} onDecide={decide} onDispatch={dispatch} onReplan={replan} />
+            <NeuralIntelligencePanel
+              state={state}
+              link={link}
+              comparison={neural.comparison}
+              loading={neural.loading}
+              error={neural.error}
+              isStale={neural.isStale}
+              onRefresh={neural.refresh}
+            />
             <div className="h-[360px] shrink-0">
               <TasksPanel state={state} busy={busy} onSimulate={(a, kind) => void act(`Simulated ${kind}`, () => api.simulateDevice(a.id, kind))} />
             </div>

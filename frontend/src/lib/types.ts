@@ -321,3 +321,101 @@ export interface ExplanationResponse {
     fallback_reason: string | null;
   };
 }
+
+
+// --- Neural Shadow Advisory Intelligence Types ---
+
+export interface ConstraintValidationSummary {
+  valid: boolean;
+  violation_count: number;
+  violations: string[];
+  checked_pairs: number;
+}
+
+export interface ModelComparisonVsOrtools {
+  count_diff: number;
+  priority_points_diff: number;
+  distance_diff_m: number;
+  matches_ortools_pairs: boolean;
+}
+
+export interface NeuralModelPrediction {
+  model_name: string;
+  checkpoint_file: string;
+  checkpoint_digest: string;
+  available: boolean;
+  status: "success" | "unavailable" | "failed";
+  selected_pairs: [string, string][];
+  unassigned_casualty_ids: string[];
+  assigned_count: number;
+  priority_points: number;
+  travel_distance_m: number;
+  travel_cost_mm: number;
+  prep_duration_ms: number;
+  inference_duration_ms: number;
+  decoding_duration_ms: number;
+  total_duration_ms: number;
+  hard_constraint_validation: ConstraintValidationSummary;
+  unfiltered_invalid_proposals: number;
+  comparison_vs_ortools?: ModelComparisonVsOrtools | null;
+  error?: string | null;
+  authorizes_dispatch: false;
+}
+
+export interface DifferingAssignment {
+  casualty_id: string;
+  ortools_responder_id: string | null;
+  mlp_responder_id: string | null;
+  gnn_responder_id: string | null;
+}
+
+export interface DisagreementAnalysis {
+  models_agree_with_each_other: boolean;
+  models_agree_with_ortools: boolean;
+  differing_assignments: DifferingAssignment[];
+  summary: string;
+}
+
+export interface OrtoolsSummary {
+  engine: string;
+  authoritative: true;
+  assigned_count: number;
+  priority_points: number;
+  travel_distance_m: number;
+  travel_cost_mm: number;
+  selected_pairs: [string, string][];
+  runtime_ms: number;
+  hard_constraint_validation: ConstraintValidationSummary;
+}
+
+export type NeuralComparisonStatus =
+  | "available"
+  | "disabled"
+  | "no_proposal"
+  | "checkpoints_unavailable"
+  | "inference_failed"
+  | "stale";
+
+export interface NeuralComparisonReport {
+  mode: "simulation";
+  schema_version: "1.0";
+  scenario_id: string;
+  scene_revision: number;
+  epoch: number;
+  proposal_id?: string | null;
+  read_only: true;
+  authorizes_dispatch: false;
+  authoritative_engine: "ortools";
+  status: NeuralComparisonStatus;
+  available: boolean;
+  context: "current" | "stale";
+  stale_reasons: string[];
+  evaluated_at: ISODate;
+  message: string;
+  ortools_summary?: OrtoolsSummary | null;
+  mlp_prediction?: NeuralModelPrediction | null;
+  gnn_prediction?: NeuralModelPrediction | null;
+  disagreement_analysis?: DisagreementAnalysis | null;
+  voice_summary?: string | null;
+  limitations: string[];
+}

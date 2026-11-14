@@ -8,6 +8,7 @@ import type {
   Severity,
   SimulationApproval,
   SimulationState,
+  NeuralComparisonReport,
 } from "./types";
 
 /**
@@ -151,4 +152,6 @@ export const api = {
       mode: "simulation",
       kind,
     }),
+
+  neuralComparison: () => request<NeuralComparisonReport>("GET", "/neural-comparison"),
 };
