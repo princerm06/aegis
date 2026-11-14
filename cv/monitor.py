@@ -25,7 +25,7 @@ seconds, then the top bar lists them with room and time ("3 ROOM 2 2:10").
 Once the operator has linked a person to a casualty and set a priority on the
 dashboard, a band on top of the card shows that human decision in the triage
 color (red immediate, yellow delayed, green minor) with "set by operator", and
-the plan for them ("PLANNED: responder-002", "responder-002 ON THE WAY"). From
+the plan for them ("TO APPROVE: responder-002", "responder-002 ON THE WAY"). From
 dispatch until the responder acknowledges, the band blinks and a ring pulses
 around the person. The camera's own observations never change this color.
 
@@ -85,7 +85,7 @@ PRIORITY_COLORS = {"immediate": (220, 38, 38), "delayed": (234, 179, 8), "minor"
                    "expectant": (110, 110, 110), "deceased": (110, 110, 110)}
 PRIORITY_INK = {"delayed": (20, 20, 20), "minor": (245, 245, 245)}
 UNASSESSED_COLOR = (60, 64, 70)
-TASK_TEXT = {"proposed": "PLANNED: {name}, awaiting approval", "dispatched": "{name} DISPATCHED",
+TASK_TEXT = {"proposed": "TO APPROVE: {name}", "dispatched": "{name} DISPATCHED",
              "delivered": "{name} ALERTED", "acknowledged": "{name} ON THE WAY", "completed": "{name} REACHED"}
 DISCLAIMER = "Camera observations, not a diagnosis"
 UNKNOWN = "\u2013"            # en dash: "the camera cannot tell"
@@ -393,13 +393,18 @@ def _font(weight: str, size: int):
 
 def _text(draw, x: float, y: float, text: str, weight: str, size: float, color, k: float,
           max_width: float | None = None, anchor: str = "lm") -> float:
-    """Draw text at (x, y) in card units; shrinks to ``max_width``. Returns its width in card units."""
+    """Draw text at (x, y) in card units; shrinks, then cuts with an ellipsis, to ``max_width``.
+
+    Returns its width in card units.
+    """
     pixels = size * k
     font = _font(weight, max(6, round(pixels)))
     if max_width is not None:
         while draw.textlength(text, font=font) > max_width * k and pixels > size * k * 0.6:
             pixels -= 1
             font = _font(weight, max(6, round(pixels)))
+        while len(text) > 1 and draw.textlength(text, font=font) > max_width * k:
+            text = text[:-2].rstrip() + "\u2026"
     draw.text((x * k, y * k), text, font=font, fill=color, anchor=anchor)
     return draw.textlength(text, font=font) / k
 
@@ -520,7 +525,7 @@ def _band(draw, callout: Callout, width: int, k: float) -> None:
     x += _text(draw, x, BAND_H / 2 + 1, "set by operator" if callout.priority else "", "label", 10.5, ink, k)
     if callout.task:
         _text(draw, width - 10, BAND_H / 2 + 1, callout.task, "label", 11, ink, k,
-              max_width=max(40, width - x - 22), anchor="rm")
+              max_width=width - x - 22, anchor="rm")
 
 
 @lru_cache(maxsize=256)

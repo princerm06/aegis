@@ -299,6 +299,17 @@ def test_the_operators_priority_and_plan_ride_on_the_card_and_blink_until_acknow
     assert all(c.lit and not c.waiting and c.task == "RESPONDER-002 ON THE WAY" for c in steady)
     planned = {"s1-t1": Mark("casualty-a", None, "responder-001", "proposed")}
     (unassessed,) = build_scene([seen], estimator, 6.0, marks=planned).callouts
-    assert unassessed.band and unassessed.priority is None and "awaiting approval" in unassessed.task
+    assert unassessed.band and unassessed.priority is None and unassessed.task.startswith("TO APPROVE: ")
     for scene in (Scene([on]), Scene([off]), Scene([unassessed])):
         assert render(image, [seen], scene).shape[0] == VIEW_H
+
+
+def test_a_long_task_line_is_cut_to_fit_instead_of_running_over_the_band():
+    from PIL import Image, ImageDraw
+
+    from cv.monitor import _text
+
+    draw = ImageDraw.Draw(Image.new("RGBA", (400, 40)))
+    width = _text(draw, 380, 14, "TO APPROVE: Mock Responder Bravo of the second team", "label", 11, (255, 255, 255),
+                  1.0, max_width=120, anchor="rm")
+    assert width <= 120

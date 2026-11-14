@@ -242,7 +242,7 @@ to a real backend, the pipeline reads `GET /state` every second. Once the
 operator has linked a person's track to a casualty and set a priority, a band
 on top of that person's card shows the **human** priority in the triage color
 (red immediate, yellow delayed, green minor) with "set by operator", and the
-plan: "PLANNED: responder-001, awaiting approval", then "responder-002
+plan: "TO APPROVE: responder-001", then "responder-002
 DISPATCHED", "ALERTED", "ON THE WAY" (acknowledged) and "REACHED". From
 dispatch until the responder acknowledges, the band blinks and a ring pulses
 around the person. Nothing the camera observes changes this color; without a
