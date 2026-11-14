@@ -1225,7 +1225,15 @@ class SimulationStore:
                     raise _not_found(f"Unknown casualty {request.casualty_id}")
                 existing = session.casualty_tracks.get(request.casualty_id)
                 if existing is not None:
-                    raise _conflict(f"Casualty is already associated with track {existing}")
+                    old = session.tracks.get(existing)
+                    if old is not None and (
+                        old.latest.track is None
+                        or old.latest.track.state == "visible"
+                    ):
+                        raise _conflict(f"Casualty is already associated with track {existing}")
+                    if old is not None:
+                        old.casualty_id = None
+                    result["replaced_track_id"] = existing
                 self._set_casualty_position(session, request.casualty_id, record.latest.position)
             record.casualty_id = request.casualty_id
             session.casualty_tracks[request.casualty_id] = record.track_id

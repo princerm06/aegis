@@ -4,7 +4,7 @@ This is an additive backend integration for the proposed `aegis-cv-signs/0.1` ob
 
 ## Wire contract
 
-`POST /api/v1/simulations/demo/cameras/{camera_id}/observations` may contain an optional `signs` object only when `track.state` is `visible`. The legacy `POST /observations` route supports the same optional evidence field. The validated fields are `schema`, `window_s`, `posture`, `movement`, `response`, and optional `eyes`, `breathing`, `visible_blood`, `camera_motion`. Every sign carries a detector confidence; invalid names, values or confidence ranges return HTTP 422.
+`POST /api/v1/simulations/demo/cameras/{camera_id}/observations` may contain an optional `signs` object only when `track.state` is `visible`. The legacy `POST /observations` route supports the same optional evidence field. The validated fields are `schema`, `window_s`, `posture`, `movement`, `response`, and optional `eyes`, `breathing`, `visible_blood`, `camera_motion`, `fall`, `walking`, `limbs`, `waving`, `face_down`, `person_nearby`, `blood_spread`, and `changes` (maximum five entries). Every sign carries a detector confidence; invalid names, values or confidence ranges return HTTP 422.
 
 The track's `latest_observation.signs` contains the newest report (or null when occluded/lost), while `latest_visible_signs` and `signs_observed_at` preserve the last observed sign evidence with an explicit timestamp. `simulation.observation_received` events also include `observation.signs`.
 

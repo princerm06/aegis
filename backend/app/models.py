@@ -58,6 +58,8 @@ class CVTrack(ContractModel):
 # Camera measurements are advisory evidence, never clinical diagnoses or priorities.
 SignConfidence = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
 SignDuration = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+LimbRegion = Literal["left_arm", "right_arm", "left_leg", "right_leg"]
+ChangedSign = Literal["posture", "movement", "response", "eyes", "breathing", "visible_blood"]
 
 
 class CameraSign(ContractModel):
@@ -100,6 +102,58 @@ class CameraMotion(ContractModel):
     speed_px_s: SignDuration | None = None
 
 
+class FallSign(CameraSign):
+    value: Literal["seen", "not_seen", "not_testable"]
+    at: AwareDatetime | None = None
+
+
+class WalkingSign(CameraSign):
+    value: Literal["seen", "not_seen", "not_testable"]
+    at: AwareDatetime | None = None
+
+
+class WavingSign(CameraSign):
+    value: Literal["seen", "not_seen", "not_testable"]
+    at: AwareDatetime | None = None
+
+
+class FaceDownSign(CameraSign):
+    value: Literal["seen", "not_seen", "not_testable"]
+    for_s: SignDuration | None = None
+
+
+class PersonNearbySign(CameraSign):
+    value: Literal["seen", "not_seen", "not_testable"]
+    for_s: SignDuration | None = None
+
+
+class LimbsSign(CameraSign):
+    value: Literal["all_moved", "some_not_moved", "none_moved", "not_testable"]
+    window_s: SignDuration
+    not_moved: list[LimbRegion] | None = None
+
+
+class BloodSpreadSign(CameraSign):
+    value: Literal["growing", "stable", "shrinking", "not_testable"]
+    window_s: SignDuration
+    change_pct: int | None = None
+
+
+class SignChange(ContractModel):
+    sign: ChangedSign
+    from_value: str = Field(alias="from")
+    to: str
+    at: AwareDatetime
+
+    @model_serializer(mode="wrap")
+    def serialize_wire_from(self, handler):
+        # Preserve the CV producer's external "from" key in nested snapshots/events.
+        values = handler(self)
+        if "from_value" in values:
+            values["from"] = values.pop("from_value")
+        return values
+
+
 class CameraSigns(ContractModel):
     schema_version: Literal["aegis-cv-signs/0.1"] = Field(alias="schema")
     window_s: Annotated[float, Field(gt=0, le=300, allow_inf_nan=False)]
@@ -110,6 +164,14 @@ class CameraSigns(ContractModel):
     breathing: BreathingMotionSign | None = None
     visible_blood: VisibleColorSign | None = None
     camera_motion: CameraMotion | None = None
+    fall: FallSign | None = None
+    walking: WalkingSign | None = None
+    limbs: LimbsSign | None = None
+    waving: WavingSign | None = None
+    face_down: FaceDownSign | None = None
+    person_nearby: PersonNearbySign | None = None
+    blood_spread: BloodSpreadSign | None = None
+    changes: list[SignChange] | None = Field(default=None, max_length=5)
 
     @model_serializer(mode="wrap")
     def serialize_wire_schema(self, handler):
