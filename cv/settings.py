@@ -106,7 +106,7 @@ class SignsSettings:
                                         # face down, person nearby (signs/position.py)
     fall_min_drop: float = 0.5          # head drop / upright body size ...
     fall_drop_s: float = 1.0            # ... within this long, then lying = fall seen
-    fall_confirm_s: float = 5.0
+    fall_confirm_s: float = 2.5         # then lying this soon after the drop started (falls: 0.6-1.9 s; kneeling first: 3 s)
     walk_window_s: float = 4.0
     walk_min_distance: float = 0.8      # ground point travel / body size while standing
     limb_window_s: float = 30.0

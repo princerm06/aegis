@@ -33,9 +33,11 @@ class Frame:
 def list_cameras() -> list[tuple[str, str]] | None:
     """(name, model) of each camera in OpenCV's index order, or None where that order is unknown.
 
-    OpenCV's AVFoundation backend numbers cameras as ``devicesWithMediaType``
-    lists them. ffmpeg's ``-list_devices`` uses another order (built-in first),
-    so it must not be used to pick an index.
+    OpenCV's AVFoundation backend numbers cameras sorted by unique ID, not in
+    the order ``devicesWithMediaType`` lists them: with a C922, an iPhone and
+    the built-in camera, the listed order put the iPhone at the C922's index.
+    ffmpeg's ``-list_devices`` uses yet another order (built-in first), so it
+    must not be used to pick an index either.
     """
     if sys.platform != "darwin":
         return None
@@ -44,6 +46,7 @@ def list_cameras() -> list[tuple[str, str]] | None:
     except ImportError:
         return None
     devices = AVFoundation.AVCaptureDevice.devicesWithMediaType_(AVFoundation.AVMediaTypeVideo)
+    devices = sorted(devices, key=lambda device: str(device.uniqueID()))
     return [(str(device.localizedName()), str(device.modelID() or "")) for device in devices]
 
 

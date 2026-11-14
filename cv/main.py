@@ -203,6 +203,14 @@ def run(args: argparse.Namespace) -> int:
             calibration_ref=base_calibration.calibration_ref if base_calibration else None,
             session_id=session, timebase=timebase, transport=transport, zones=zone_map)
         publisher.start()
+    global _marks
+    _marks = None
+    if publisher is not None and signs is not None and not args.mock_backend:
+        from cv.assignments import OperatorMarks
+
+        _marks = OperatorMarks(settings.publisher.base_url, settings.publisher.scenario_id,
+                               settings.publisher.camera_id)
+        _marks.start()
 
     log.info("Session %s | camera %s | model %s on %s | source %s", session,
              settings.publisher.camera_id, settings.detector.model, detector.device, camera.label)
@@ -326,6 +334,8 @@ def run(args: argparse.Namespace) -> int:
         camera.release()
         if publisher is not None:
             publisher.stop()
+        if _marks is not None:
+            _marks.stop()
         if stream is not None:
             stream.stop()
         if not args.no_display:
@@ -385,7 +395,7 @@ def fit_window(width: int, height: int, max_width: int = 1400) -> None:
         cv2.resizeWindow(WINDOW, int(width * scale), int(height * scale))
 
 
-_layout = _last_seen = None
+_layout = _last_seen = _marks = None
 
 
 def responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs, now, warnings):
@@ -406,7 +416,8 @@ def responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs,
     else:
         status.append("MOCK" if args.mock_backend else
                       ("backend offline" if pub["backing_off"] else "backend OK"))
-    return render(image, tracks, build_scene(tracks, signs, now, _last_seen), _layout, status, warnings, keys,
+    marks = _marks.get() if _marks is not None else None
+    return render(image, tracks, build_scene(tracks, signs, now, _last_seen, marks), _layout, status, warnings, keys,
                   settings.tracking.keypoint_min_conf)
 
 

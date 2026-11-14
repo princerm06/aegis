@@ -22,6 +22,13 @@ under the gauges say what happened ("Fall seen 1:20 ago", "Waving now"). A
 person who just left the picture keeps a small "NOT IN VIEW" chip for a few
 seconds, then the top bar lists them with room and time ("3 ROOM 2 2:10").
 
+Once the operator has linked a person to a casualty and set a priority on the
+dashboard, a band on top of the card shows that human decision in the triage
+color (red immediate, yellow delayed, green minor) with "set by operator", and
+the plan for them ("PLANNED: responder-002", "responder-002 ON THE WAY"). From
+dispatch until the responder acknowledges, the band blinks and a ring pulses
+around the person. The camera's own observations never change this color.
+
 Cards are drawn with Pillow (DIN signage faces where available) and cached
 until a value changes; placement avoids other cards, faces, bodies and crossing
 leader lines and is smoothed so cards glide rather than jump.
@@ -49,6 +56,7 @@ HINT_H = 20                   # added per line under the gauges
 MAX_LINES = 2
 GAUGE_W = 78
 CHIP_W, CHIP_H = 156, 34      # a person just out of view
+BAND_H = 28                   # the operator's priority and plan, on top of the card
 EDGE_W = 5                    # the identity color along the card's left edge
 SUPERSAMPLE = 2
 HIDE_UNSEEN_AFTER_S = 5.0     # people out of view this long lose their card ...
@@ -72,6 +80,13 @@ AMBER_BGR = (0, 176, 255)
 PALETTE = ((255, 163, 77), (255, 140, 181), (96, 224, 168), (192, 138, 255), (130, 170, 210), (215, 215, 215))
 REGION_NAMES = {"head": "HEAD", "torso": "TORSO", "left_arm": "L ARM", "right_arm": "R ARM",
                 "left_leg": "L LEG", "right_leg": "R LEG"}
+# Triage colors of the operator's priority (RGB), and the text color on each.
+PRIORITY_COLORS = {"immediate": (220, 38, 38), "delayed": (234, 179, 8), "minor": (34, 170, 85),
+                   "expectant": (110, 110, 110), "deceased": (110, 110, 110)}
+PRIORITY_INK = {"delayed": (20, 20, 20), "minor": (245, 245, 245)}
+UNASSESSED_COLOR = (60, 64, 70)
+TASK_TEXT = {"proposed": "PLANNED: {name}, awaiting approval", "dispatched": "{name} DISPATCHED",
+             "delivered": "{name} ALERTED", "acknowledged": "{name} ON THE WAY", "completed": "{name} REACHED"}
 DISCLAIMER = "Camera observations, not a diagnosis"
 UNKNOWN = "\u2013"            # en dash: "the camera cannot tell"
 _SANS_BOLD = (("/System/Library/Fonts/HelveticaNeue.ttc", "Bold", "face"),
@@ -135,12 +150,20 @@ class Callout:
     in_view: bool
     card: Card
     blood_regions: tuple[str, ...] = ()
+    priority: str | None = None       # set by the operator on the dashboard, never by the camera
+    task: str = ""                    # the plan for this person, e.g. "responder-002 ON THE WAY"
+    waiting: bool = False             # dispatched, not yet acknowledged: blinks
+    lit: bool = True                  # blink phase
+
+    @property
+    def band(self) -> bool:
+        return self.in_view and bool(self.priority or self.task)
 
     @property
     def size(self) -> tuple[int, int]:
         if not self.in_view:
             return CHIP_W, CHIP_H
-        return BOX_W, BOX_H + HINT_H * len(self.card.lines)
+        return BOX_W, BOX_H + HINT_H * len(self.card.lines) + (BAND_H if self.band else 0)
 
 
 @dataclass
@@ -312,9 +335,19 @@ def identity_color(number: int) -> tuple[int, int, int]:
     return PALETTE[(number - 1) % len(PALETTE)]
 
 
-def build_scene(tracks: Sequence, signs, now: float, last_seen: LastSeen | None = None) -> Scene:
+def task_text(mark) -> str:
+    if mark is None or mark.status is None:
+        return ""
+    return TASK_TEXT.get(mark.status, "{name}").format(name=(mark.responder or "responder").upper())
+
+
+def build_scene(tracks: Sequence, signs, now: float, last_seen: LastSeen | None = None,
+                marks: dict | None = None) -> Scene:
     """Cards for everyone in view or just out of it, in ID order; with ``last_seen``,
-    also who left the picture, where and when."""
+    also who left the picture, where and when; with ``marks`` (local track ID: the
+    operator's decision, from ``cv.assignments``), the priority band."""
+    marks = marks or {}
+    lit = int(now * 2) % 2 == 0
     scene = Scene(out_of_view=last_seen.update(tracks, now) if last_seen is not None else [])
     for track in sorted(tracks, key=track_number):
         snapshot = signs.snapshot(track, now)
@@ -326,11 +359,14 @@ def build_scene(tracks: Sequence, signs, now: float, last_seen: LastSeen | None 
         blood = snapshot.get("visible_blood", {})
         number = track_number(track)
         posture = snapshot["posture"]["value"]
+        mark = marks.get(track.track_id)
+        waiting = mark is not None and mark.waiting
         scene.callouts.append(Callout(
             track.track_id, number, identity_color(number),
             "" if posture == "unknown" else posture.upper(), track.detected,
             card_for(snapshot, signs.display_context(track.track_id, now)),
-            tuple(blood.get("regions", ())) if blood.get("value") == "detected" else ()))
+            tuple(blood.get("regions", ())) if blood.get("value") == "detected" else (),
+            mark.priority if mark is not None else None, task_text(mark), waiting, lit or not waiting))
     return scene
 
 
@@ -470,6 +506,23 @@ def _gauge(draw, x: float, top: float, gauge: Gauge, k: float) -> None:
     _text(draw, cx, top + 84, gauge.label, "label", 10.5, GREY, k, max_width=GAUGE_W - 4, anchor="mm")
 
 
+def _band(draw, callout: Callout, width: int, k: float) -> None:
+    """The operator's priority and the plan, across the top of the card; dim in the blink's off phase."""
+    color = PRIORITY_COLORS.get(callout.priority, UNASSESSED_COLOR)
+    ink = PRIORITY_INK.get(callout.priority, WHITE)
+    if not callout.lit:
+        color, ink = tuple(round(0.35 * c + 0.65 * b) for c, b in zip(color, BOX_FILL[:3])), GREY
+    draw.rounded_rectangle((EDGE_W * k, 0, width * k - 1, (BAND_H + 7) * k), radius=7 * k, fill=(*color, 255))
+    draw.rectangle((EDGE_W * k, (BAND_H - 1) * k, width * k - 1, (BAND_H + 8) * k), fill=BOX_FILL)
+    label = callout.priority.upper() if callout.priority else "UNASSESSED"
+    x = EDGE_W + 10
+    x += _text(draw, x, BAND_H / 2, label, "word", 17, ink, k) + 6
+    x += _text(draw, x, BAND_H / 2 + 1, "set by operator" if callout.priority else "", "label", 10.5, ink, k)
+    if callout.task:
+        _text(draw, width - 10, BAND_H / 2 + 1, callout.task, "label", 11, ink, k,
+              max_width=max(40, width - x - 22), anchor="rm")
+
+
 @lru_cache(maxsize=256)
 def _box(callout: Callout, scale: float) -> tuple[np.ndarray, np.ndarray]:
     """(BGR image, alpha 0..1) of one card."""
@@ -484,9 +537,13 @@ def _box(callout: Callout, scale: float) -> tuple[np.ndarray, np.ndarray]:
     draw.rounded_rectangle((EDGE_W * k, 0, width * k - 1, height * k - 1), radius=radius, fill=BOX_FILL)
     draw.rectangle((EDGE_W * k, 0, (EDGE_W + 8) * k, height * k - 1), fill=BOX_FILL)   # square inner edge
 
+    top = 0
+    if callout.band:
+        top = BAND_H
+        _band(draw, callout, width, k)
     number = str(callout.number)
     badge_w = 14 + 10 * len(number)
-    mid = height / 2 if not callout.in_view else 20
+    mid = height / 2 if not callout.in_view else top + 20
     left = EDGE_W + 9
     draw.rounded_rectangle((left * k, (mid - 11) * k, (left + badge_w) * k, (mid + 11) * k), radius=4 * k,
                            fill=identity)
@@ -496,14 +553,15 @@ def _box(callout: Callout, scale: float) -> tuple[np.ndarray, np.ndarray]:
         _text(draw, x, mid + 1, "NOT IN VIEW", "word", 17, GREY, k)
     else:
         if callout.posture:
-            _text(draw, x, 21, callout.posture, "word", 19, WHITE, k, max_width=140)
-        _text(draw, width - 12, 21, card.movement.text, "word", 17, STATE_COLORS[card.movement.state], k,
+            _text(draw, x, top + 21, callout.posture, "word", 19, WHITE, k, max_width=140)
+        _text(draw, width - 12, top + 21, card.movement.text, "word", 17, STATE_COLORS[card.movement.state], k,
               max_width=140, anchor="rm")
-        draw.line(((left * k, 37 * k), ((width - 12) * k, 37 * k)), fill=(255, 255, 255, 34), width=max(1, round(k)))
+        draw.line(((left * k, (top + 37) * k), ((width - 12) * k, (top + 37) * k)), fill=(255, 255, 255, 34),
+                  width=max(1, round(k)))
         for index, gauge in enumerate(card.gauges):
-            _gauge(draw, EDGE_W + 6 + index * GAUGE_W, 40, gauge, k)
+            _gauge(draw, EDGE_W + 6 + index * GAUGE_W, top + 40, gauge, k)
         for index, line in enumerate(card.lines):
-            _text(draw, (width + EDGE_W) / 2, BOX_H + 4 + index * HINT_H, line.text, "label", 12,
+            _text(draw, (width + EDGE_W) / 2, top + BOX_H + 4 + index * HINT_H, line.text, "label", 12,
                   STATE_COLORS[line.state], k, max_width=width - 28, anchor="mm")
 
     size = (round(width * scale), round(height * scale))
@@ -798,6 +856,13 @@ def render(image, tracks: Sequence, scene: Scene, layout: CalloutLayout | None =
                        sizes[callout.track_id], callout.in_view))
     positions = layout.place(people, (round(BOX_W * scale), round(BOX_H * scale)), (view_w, view_h))
     anchors = {person[0]: person[2] for person in people}
+    for callout in scene.callouts:
+        if callout.waiting and callout.lit and callout.in_view and callout.track_id in anchors:
+            color = PRIORITY_COLORS.get(callout.priority, UNASSESSED_COLOR)[::-1]
+            x, y = (int(v) for v in anchors[callout.track_id])
+            radius = max(24, round(0.06 * view_h))
+            cv2.circle(canvas, (x, y), radius + 3, (16, 16, 16), 7, cv2.LINE_AA)
+            cv2.circle(canvas, (x, y), radius, color, 4, cv2.LINE_AA)
     for callout in scene.callouts:                       # leaders first, so cards sit on top of them
         if callout.track_id in positions and callout.in_view:
             x, y = positions[callout.track_id]

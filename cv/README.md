@@ -237,6 +237,17 @@ by default because the frames show people; `--stream-host 0.0.0.0` exposes it to
 the network. Measured on a replayed clip: about 9 frames per second to one
 viewer, and the command reached the pipeline.
 
+**Who needs help first, on the video** (`cv/assignments.py`): when publishing
+to a real backend, the pipeline reads `GET /state` every second. Once the
+operator has linked a person's track to a casualty and set a priority, a band
+on top of that person's card shows the **human** priority in the triage color
+(red immediate, yellow delayed, green minor) with "set by operator", and the
+plan: "PLANNED: responder-001, awaiting approval", then "responder-002
+DISPATCHED", "ALERTED", "ON THE WAY" (acknowledged) and "REACHED". From
+dispatch until the responder acknowledges, the band blinks and a ring pulses
+around the person. Nothing the camera observes changes this color; without a
+link or with the backend unreachable for 10 s, there is no band.
+
 ## What is published
 
 `POST /api/v1/simulations/demo/cameras/<camera_id>/observations`:
@@ -659,7 +670,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-192 tests. The suite covers:
+194 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.
@@ -693,7 +704,9 @@ python -m pytest cv/tests
 - Responder view: amber findings, grey reasons, listening countdown, no
   clinical words or heart rate, any frame size and crowd size; boxes stay in
   the frame beside their person, off faces and off each other, and follow
-  smoothly.
+  smoothly. The operator's priority band: absent until linked and assessed,
+  blinking from dispatch until acknowledged, and read back from the in-process
+  backend through link, assess, plan, approve, dispatch and acknowledge.
 - Rooms and bodycam: camera still / steady / moving / unknown from the
   background (a moving person is not camera motion), camera sway not counted
   as movement while a raised hand still counts as a response, a moving camera

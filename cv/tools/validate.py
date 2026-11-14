@@ -155,9 +155,11 @@ TAKES = {take.name: take for take in (
     Take("walk", 30, STAND + "When the voice says walk, walk slowly across the view and back.",
          cues=((8, "Walk"),), checks=(Check("value", "walking", "seen", 16), Check("absent", "walking", "seen", 0, 7),
                                       Check("absent", "waving", "seen"))),
-    Take("wave", 30, STAND + "When the voice says wave, wave one hand above your head until the end.",
+    Take("wave", 30, STAND + "When the voice says wave, wave your whole arm above your head, straight, from side to side, "
+         "about once a second, until the end.",
          cues=((12, "Wave"),), checks=(Check("value", "waving", "seen", 18), Check("absent", "waving", "seen", 0, 11))),
-    Take("wave-lying", 35, LIE + "When the voice says wave, hold one arm up and wave it until the end.",
+    Take("wave-lying", 35, LIE + "When the voice says wave, raise one arm straight up and swing it from side "
+         "to side, about once a second, until the end.",
          cues=((15, "Wave"),), checks=(Check("value", "waving", "seen", 21), Check("absent", "waving", "seen", 0, 14))),
     Take("face-down", 45, "Lie face down two to three metres from the camera, whole body in view, forehead on "
          "your folded arms. When the voice says turn, roll onto your back.", cues=((25, "Turn onto your back"),),
@@ -169,6 +171,13 @@ TAKES = {take.name: take for take in (
          checks=(Check("value", "person_nearby", "seen", 25), Check("absent", "person_nearby", "seen", 0, 14))),
     Take("walk-past", 30, LIE + "A second person walks past you, about one metre away, without stopping, "
          "when the voice says go.", cues=((12, "Go"),), checks=(Check("absent", "person_nearby", "seen"),)),
+    Take("demo-two", 60, "Two people half lying, propped on their elbows or leaning back, about two metres "
+         "apart, two to three metres from the camera, whole bodies in view. Person A keeps the eyes closed and "
+         "never moves. Person B keeps the eyes open, raises a hand at the command and, when told, waves one hand "
+         "above the head.", command_at_s=(20,),
+         cues=((38, "Person B, wave"),),
+         checks=(Check("reaches", "response", "responded", 22, 36), Check("reaches", "response", "no_response", 29),
+                 Check("reaches", "waving", "seen", 42), Check("absent", "person_nearby", "seen"))),
     Take("one-arm", 55, LIE + "When the voice says move, keep moving only your right arm until the end.",
          cues=((10, "Move your right arm, keep everything else still"),),
          checks=(Check("value", "limbs", "some_not_moved", 40),)),

@@ -276,3 +276,29 @@ def test_a_card_never_glides_across_another_card():
         placed = layout.place([a, ("b", (x, 300, x + 120, 700), (x + 60, 360), None)], size, frame)
         ra, rb = ((px, py, px + BOX_W, py + BOX_H) for px, py in (placed["a"], placed["b"]))
         assert overlap(ra, rb) == 0, step
+
+
+def test_the_operators_priority_and_plan_ride_on_the_card_and_blink_until_acknowledged():
+    from cv.assignments import Mark
+
+    estimator = make_estimator()
+    image = body_image((300, 200, 340, 250))
+    seen = make_track()
+    seen.short_id, seen.zone_id, seen.published_xy, seen.last_seen = "t1", "room-2", None, 5.9
+    for i in range(60):
+        estimator.update(image, [seen], i / 10)
+    (plain,) = build_scene([seen], estimator, 6.0).callouts
+    assert plain.priority is None and not plain.band and plain.size[1] == BOX_H + HINT_H * len(plain.card.lines)
+
+    sent = {"s1-t1": Mark("casualty-a", "immediate", "responder-002", "dispatched")}
+    on, off = (build_scene([seen], estimator, t, marks=sent).callouts[0] for t in (6.0, 6.5))
+    assert (on.priority, on.task, on.waiting) == ("immediate", "RESPONDER-002 DISPATCHED", True)
+    assert on.lit != off.lit and on.size[1] > plain.size[1]          # blinks; the band adds height
+    acked = {"s1-t1": Mark("casualty-a", "immediate", "responder-002", "acknowledged")}
+    steady = [build_scene([seen], estimator, t, marks=acked).callouts[0] for t in (6.0, 6.5)]
+    assert all(c.lit and not c.waiting and c.task == "RESPONDER-002 ON THE WAY" for c in steady)
+    planned = {"s1-t1": Mark("casualty-a", None, "responder-001", "proposed")}
+    (unassessed,) = build_scene([seen], estimator, 6.0, marks=planned).callouts
+    assert unassessed.band and unassessed.priority is None and "awaiting approval" in unassessed.task
+    for scene in (Scene([on]), Scene([off]), Scene([unassessed])):
+        assert render(image, [seen], scene).shape[0] == VIEW_H

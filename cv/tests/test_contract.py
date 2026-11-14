@@ -168,3 +168,54 @@ def test_backend_reset_clears_the_camera_and_publisher_recovers():
     publisher.step()   # 404 -> marks unregistered
     publisher.step()   # re-registers and resends
     assert publisher.stats.registrations == 2 and publisher.stats.accepted == 2
+
+
+def test_operator_priority_and_dispatch_read_back_for_the_responder_view():
+    from cv.assignments import marks_from_state
+
+    client = TestClient(create_app())
+    client.post("/api/v1/simulations/demo/reset", json={"mode": "simulation"})
+    base, operator, keys = "/api/v1/simulations/demo", "test-operator", iter(range(100))
+
+    def post(path, body):
+        response = client.post(base + path, json=body, headers={"Idempotency-Key": f"marks-{next(keys)}"})
+        assert response.status_code in (200, 201), response.text
+        return response.json()
+
+    def transport(method, path, body):
+        response = client.request(method, path, json=body)
+        return response.status_code, response.json()
+
+    publisher, timebase = make_publisher(transport)
+    now = timebase.now()
+    publisher.submit([report(now)], now)
+    publisher.step()
+    state = client.get(base + "/state").json()
+    assert marks_from_state(state, "logitech-1") == {}            # seen, not linked: no band
+    (track,) = state["tracks"]
+    casualty = state["scenario"]["casualties"][0]["id"]
+    post("/associations", {"track_id": track["track_id"], "casualty_id": casualty, "create_casualty": False,
+                           "actor": operator})
+    state = client.get(base + "/state").json()
+    assert marks_from_state(state, "logitech-1")["s1-t1"].priority is None
+    assert marks_from_state(state, "phone-1") == {}               # another camera's tracks only
+
+    post(f"/casualties/{casualty}/assessment", {"severity": "immediate", "source": "human",
+                                                "assessed_by": operator, "assessed_at": timebase.iso(now)})
+    state = post("/replan", {"actor": operator, "reason": "test", "solver": "ortools"})["state"]
+    mark = marks_from_state(state, "logitech-1")["s1-t1"]
+    assert (mark.casualty_id, mark.priority, mark.status, mark.waiting) == (casualty, "immediate", "proposed", False)
+    assert mark.responder
+
+    proposal = next(p for p in state["proposals"] if p["id"] == state["current_proposal_id"])
+    approval = post(f"/proposals/{proposal['id']}/decision", {
+        "proposal_revision": proposal["revision"], "decision": "approve", "actor": operator,
+        "mode": "simulation"})["result"]
+    body = post("/dispatches", {"proposal_id": proposal["id"], "proposal_revision": proposal["revision"],
+                                "approval_id": approval["id"], "actor": operator, "mode": "simulation"})
+    mark = marks_from_state(body["state"], "logitech-1")["s1-t1"]
+    assert mark.status == "dispatched" and mark.waiting
+    assignment = next(a for a in body["state"]["assignments"] if a["casualty_id"] == casualty)
+    state = post(f"/assignments/{assignment['id']}/simulate-device-event", {"kind": "acknowledged"})["state"]
+    mark = marks_from_state(state, "logitech-1")["s1-t1"]
+    assert mark.status == "acknowledged" and not mark.waiting
