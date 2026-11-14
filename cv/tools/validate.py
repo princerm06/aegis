@@ -116,6 +116,7 @@ class Take:
 
 
 LIE = "Lie on your back two to three metres from the camera, chest in view, and keep still. "
+STAND = "Stand three to four metres from the camera, whole body in view. "
 TAKES = {take.name: take for take in (
     Take("breathe-12", 75, LIE + "Breathe with the voice.", pace=(12, 0, 75),
          checks=(Check("rate", "breathing", start_s=20, pace_bpm=12), Check("value", "movement", "still", 10))),
@@ -144,6 +145,21 @@ TAKES = {take.name: take for take in (
          checks=(Check("no_blood", "visible_blood", start_s=3),)),
     Take("red-props", 30, LIE + "Red objects next to you, such as a bag, bottle or towel; no fake blood.",
          checks=(Check("no_blood", "visible_blood", start_s=3),)),
+    Take("fall-to-mat", 35, STAND + "A thick mat next to you. When the voice says now, go down onto the mat "
+         "quickly, knees first, and stay lying. Do not throw yourself down.", cues=((15, "Now"),),
+         checks=(Check("value", "fall", "seen", 22), Check("absent", "fall", "seen", 0, 14))),
+    Take("lie-down-slowly", 40, STAND + "When the voice says lie down, lie down on the floor slowly.",
+         cues=((15, "Lie down slowly"),), checks=(Check("absent", "fall", "seen"),)),
+    Take("sit-down", 30, STAND + "A chair behind you. When the voice says sit, sit down on it normally.",
+         cues=((15, "Sit down"),), checks=(Check("absent", "fall", "seen"),)),
+    Take("walk", 30, STAND + "When the voice says walk, walk slowly across the view and back.",
+         cues=((8, "Walk"),), checks=(Check("value", "walking", "seen", 16), Check("absent", "walking", "seen", 0, 7))),
+    Take("one-arm", 55, LIE + "When the voice says move, keep moving only your right arm until the end.",
+         cues=((10, "Move your right arm, keep everything else still"),),
+         checks=(Check("value", "limbs", "some_not_moved", 40),)),
+    Take("blood-spreading", 60, LIE + "Fake blood on your left forearm, arm in view. When the voice says add, "
+         "slowly add more fake blood around the same spot.", cues=((20, "Add more blood, slowly"),),
+         checks=(Check("value", "blood_spread", "growing", 45), Check("region", "visible_blood", "left_arm", 5))),
 )}
 
 

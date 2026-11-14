@@ -99,6 +99,18 @@ class SignsSettings:
     breathing_max_bpm: float = 40.0
     breathing_min_snr: float = 40.0     # velocity-spectrum peak over the rest of the band
     breathing_min_amplitude_px: float = 0.3
+    blood_spread_window_s: float = 30.0  # red area now vs earlier in this window
+    blood_spread_ratio: float = 1.3     # this much more (or 1/x less) red area = growing (shrinking)
+    history: bool = True                # fall, walking, limbs, changes (signs/history.py)
+    fall_min_drop: float = 0.5          # head drop / upright body size ...
+    fall_drop_s: float = 1.0            # ... within this long, then lying = fall seen
+    fall_confirm_s: float = 5.0
+    walk_window_s: float = 4.0
+    walk_min_distance: float = 0.8      # ground point travel / body size while standing
+    limb_window_s: float = 30.0
+    limb_move_threshold: float = 0.12   # hand or foot displacement / body size, relative to the torso
+    change_hold_s: float = 3.0          # a new value must hold this long to count as a change
+    change_keep_s: float = 300.0
 
 
 @dataclass(frozen=True)
@@ -114,6 +126,7 @@ class PublisherSettings:
     max_backoff_s: float = 5.0
     mock_log: str = "artifacts/mock_{camera_id}.jsonl"
     send_signs: bool = False            # needs the backend change in cv/CONTRACT_PROPOSAL.md
+    send_history: bool = False          # also fall, walking, limbs, blood_spread, changes (not accepted yet)
 
 
 @dataclass(frozen=True)

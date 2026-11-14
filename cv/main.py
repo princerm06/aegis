@@ -63,6 +63,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--signs", action="store_true", help="observe signs (config: signs.enabled)")
     parser.add_argument("--send-signs", action="store_true",
                         help="include signs in reports (needs the backend change in CONTRACT_PROPOSAL.md)")
+    parser.add_argument("--send-history", action="store_true",
+                        help="with --send-signs, also send fall, walking, limbs, blood_spread, changes "
+                             "(the backend rejects them until it adds them)")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
 
@@ -81,6 +84,8 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
         signs = replace(signs, enabled=True)
     if getattr(args, "send_signs", False):
         publisher = replace(publisher, send_signs=True)
+    if getattr(args, "send_history", False):
+        publisher = replace(publisher, send_history=True)
     return replace(settings, publisher=publisher, signs=signs)
 
 

@@ -75,11 +75,35 @@ def test_breathing_rate_and_listening_countdown():
     assert responded.response.value == "YES" and responded.response.state == "observed"
 
 
+HISTORY = {
+    "fall": {"value": "seen", "confidence": 0.8, "at": "2026-11-14T05:00:01.000Z"},
+    "blood_spread": {"value": "growing", "confidence": 0.6, "window_s": 30.0, "change_pct": 45},
+    "limbs": {"value": "some_not_moved", "confidence": 0.45, "window_s": 30.0, "not_moved": ["left_leg"]},
+    "walking": {"value": "seen", "confidence": 0.7, "at": "2026-11-14T05:00:00.000Z"},
+    "changes": [{"sign": "movement", "from": "moving", "to": "still", "at": "2026-11-14T05:00:02.000Z"},
+                {"sign": "eyes", "from": "open", "to": "closed", "at": "2026-11-14T05:00:03.000Z"}],
+}
+
+
+def test_what_happened_shows_under_the_gauges_most_important_first():
+    context = {"fall_ago_s": 80.0, "walked_ago_s": 95.0, "changes_ago_s": [79.0, 40.0]}
+    card = card_for({**UNKNOWN, **HISTORY}, context)
+    assert [line.text for line in card.notes] == [
+        "Fall seen 1:20 ago", "Blood area growing, +45% in 30 s", "Eyes closed 40 s ago, were open",
+        "Not moved in 30 s: L LEG", "Walked 1:35 ago"]
+    assert [line.text for line in card.lines] == ["Fall seen 1:20 ago", "Blood area growing, +45% in 30 s"]
+    assert {line.state for line in card.lines} == {"attention"}          # the breathing hint gives way
+    assert callout(1, {**UNKNOWN, **HISTORY}).size == (BOX_W, BOX_H + 2 * HINT_H)
+    quiet = card_for({**UNKNOWN, "fall": {"value": "not_seen", "confidence": 0.5}, "changes": []})
+    assert [line.text for line in quiet.lines] == ["Hold the camera still to measure breathing"]
+
+
 def test_no_clinical_words_no_heart_rate_and_ascii_only():
     rate = {**FINDINGS, "breathing": {"value": "motion_detected", "confidence": 0.7, "rate_bpm": 31.0}}
-    for signs in (FINDINGS, UNKNOWN, rate):
-        card = card_for(signs)
+    for signs in (FINDINGS, UNKNOWN, rate, {**FINDINGS, **HISTORY}):
+        card = card_for(signs, {"fall_ago_s": 5.0, "walked_ago_s": 9.0, "changes_ago_s": [3.0, 2.0]})
         texts = values(card) + [g.label for g in card.gauges] + [g.unit for g in card.gauges] + [card.hint]
+        texts += [line.text for line in card.notes]
         for text in texts:
             assert text.replace(UNKNOWN_VALUE, "").isascii()
             assert not re.search(r"severity|critical|immediate|diagnos|triage|priority|heart|pulse|bpm", text, re.I)

@@ -8,43 +8,49 @@ clips:
     source: datasets/stock/mixkit-blood-car-crash.mp4
     checks:
       - {kind: region, sign: visible_blood, value: head}
+      - {kind: absent, sign: fall, value: seen}
 
   - name: roses-no-blood                     # red roses next to a woman lying on the floor
     source: datasets/stock/pexels-woman-lying-floor.mp4
     checks:
       - {kind: no_blood, sign: visible_blood}
+      - {kind: absent, sign: fall, value: seen}
 
   - name: three-lying-no-blood
     source: datasets/stock/pexels-three-lying-overhead.mp4
     checks:
       - {kind: no_blood, sign: visible_blood}
+      - {kind: absent, sign: fall, value: seen}
 
   - name: eyes-closed-man
     source: datasets/stock/pexels-man-eyes-closed-breathing.mp4
     checks:
       - {kind: value, sign: eyes, value: closed}
+      - {kind: absent, sign: fall, value: seen}
 
   - name: sleeping-man-eyes                  # handheld, slow pan
     source: datasets/stock/pexels-man-sleeping-720.mp4
     moving_camera: true
     checks:
       - {kind: value, sign: eyes, value: closed}
+      - {kind: absent, sign: fall, value: seen}
 
   - name: sleeping-woman-eyes
     source: datasets/stock/pexels-woman-sleeping-720.mp4
     checks:
       - {kind: value, sign: eyes, value: closed}
+      - {kind: absent, sign: fall, value: seen}
 
-  - {name: urfall-01-lying, source: datasets/urfall/fall-01-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}]}
-  - {name: urfall-02-lying, source: datasets/urfall/fall-02-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}]}
-  - {name: urfall-03-lying, source: datasets/urfall/fall-03-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}]}
-  - {name: urfall-04-lying, source: datasets/urfall/fall-04-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}]}
-  - {name: urfall-05-lying, source: datasets/urfall/fall-05-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}]}
-  - {name: urfall-06-lying, source: datasets/urfall/fall-06-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}]}
-  - {name: urfall-07-lying, source: datasets/urfall/fall-07-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}]}
-  - {name: urfall-08-lying, source: datasets/urfall/fall-08-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}]}
-  - {name: urfall-09-lying, source: datasets/urfall/fall-09-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}]}
-  - {name: urfall-10-lying, source: datasets/urfall/fall-10-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}]}
+  - {name: urfall-01-lying, source: datasets/urfall/fall-01-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-02-lying, source: datasets/urfall/fall-02-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-03-lying, source: datasets/urfall/fall-03-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-04-lying, source: datasets/urfall/fall-04-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-05-lying, source: datasets/urfall/fall-05-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-06-lying, source: datasets/urfall/fall-06-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-07-lying, source: datasets/urfall/fall-07-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-08-lying, source: datasets/urfall/fall-08-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-09-lying, source: datasets/urfall/fall-09-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-10-lying, source: datasets/urfall/fall-10-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
 
   # --- Breathing on real people (no reference rates are published, so these
   # test failure directions, not rate accuracy). Clips stay local, numbers only.

@@ -110,6 +110,56 @@ Show `not_testable` as grey, not as normal, and never as "fine": a person the
 camera cannot assess is not evidence of anything. `cv/monitor.py` shows one
 layout (rows: blood, breathing, response, eyes, movement).
 
+## History signs (proposed next, for Prince)
+
+Five optional keys on top of the current `signs`. They answer the questions a
+responder asks first (did they walk, did they fall, is the bleeding getting
+worse, has anything changed, is a limb not moving), all as things seen on
+camera. The human still assigns the simulated triage priority. CV sends them
+only with `--send-history` (`publisher.send_history`), because the current
+`CameraSigns` (`extra="forbid"`) would reject them.
+
+```json
+"fall":         {"value": "seen", "confidence": 0.7, "at": "2026-11-15T14:03:12.400Z"},
+"walking":      {"value": "not_seen", "confidence": 0.5},
+"limbs":        {"value": "some_not_moved", "confidence": 0.45, "window_s": 30.0, "not_moved": ["left_leg"]},
+"blood_spread": {"value": "growing", "confidence": 0.6, "window_s": 30.0, "change_pct": 45},
+"changes":      [{"sign": "eyes", "from": "open", "to": "closed", "at": "2026-11-15T14:03:40.000Z"}]
+```
+
+| Key | Values | What it means |
+| --- | --- | --- |
+| `fall` | `seen`, `not_seen`, `not_testable` | The head dropped by at least half the body height within 1 s from standing or sitting, and the person stayed down. `at` is when the drop started. Lying down slowly or sitting down is not a fall. |
+| `walking` | `seen`, `not_seen`, `not_testable` | Standing and moving across the floor (at least 0.8 body heights in 4 s). `at` is the last time. |
+| `limbs` | `all_moved`, `some_not_moved`, `none_moved`, `not_testable` | Which arms and legs moved relative to the body in the last 30 s. `not_moved` lists the ones that did not. It shows an absence of movement only, not a cause. |
+| `blood_spread` | `growing`, `stable`, `shrinking`, `not_testable` | The red area seen now compared with 30 s ago, relative to body size. It is sent only when blood colour is detected, and the colour detection limits on `visible_blood` apply to it too. |
+| `changes` | up to 5 entries | The last notable changes of the existing signs, each held for at least 3 s, for example eyes from `open` to `closed`, or response from `responded` to `no_response`. |
+
+No confidence goes above 0.9 (limbs 0.6, blood spread 0.8). A moving camera makes
+`fall`, `walking` and `limbs` `not_testable` (`reason: camera_moving`) and
+starts them over.
+
+The models are in `cv/history_contract.py` (built on `CameraSign` and
+`CameraSigns` from `backend/app/models.py`; `extra="forbid"` kept). A CV test
+checks a real snapshot against them, so the CV output and this proposal stay
+in sync. To accept the keys:
+
+1. Copy the five sign classes and the fields of `CameraSignsWithHistory` into
+   `backend/app/models.py`. The schema can stay `aegis-cv-signs/0.1`, since
+   every new key is optional.
+2. Nothing else changes: they are stored and exposed with the other signs and
+   never feed the solver or the priority.
+3. Tell CV, and we turn on `--send-history`.
+
+For Hillary: show a seen `fall`, a `growing` `blood_spread`, a limb in
+`not_moved` and the latest entry in `changes` as short notes with their age
+(as `cv/monitor.py` does under the gauges, for example "Fall seen 1:20 ago").
+Show `walking: seen` as a plain note.
+
+Measured so far: `fall` was seen in 8 of 10 UR Fall clips. The two misses
+are clips where the tracker loses the person mid-fall. There were no false
+falls on the 6 stock clips of people lying, sleeping or in a car crash.
+
 ## Not proposed
 
 - **Heart rate:** the brief excludes camera-based heart rate (rPPG), and a

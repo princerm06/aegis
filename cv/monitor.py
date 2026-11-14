@@ -43,7 +43,8 @@ MIN_VIEW_W = 720              # narrower (portrait) pictures get dark side margi
 TOP_BAR = 30
 BOTTOM_MARGIN = 40            # kept clear for warnings and the disclaimer
 BOX_W, BOX_H = 332, 134       # card without the hint line
-HINT_H = 20                   # added when a gauge needs an explanation
+HINT_H = 20                   # added per line under the gauges
+MAX_LINES = 2
 GAUGE_W = 78
 CHIP_W, CHIP_H = 156, 34      # a person just out of view
 EDGE_W = 5                    # the identity color along the card's left edge
@@ -108,10 +109,17 @@ class Card:
     response: Gauge
     blood: Gauge
     hint: str = ""                    # why breathing cannot be measured, when it cannot
+    notes: tuple[Line, ...] = ()      # what happened: fall, blood spreading, a change, ...
 
     @property
     def gauges(self) -> tuple[Gauge, Gauge, Gauge, Gauge]:
         return self.breathing, self.eyes, self.response, self.blood
+
+    @property
+    def lines(self) -> tuple[Line, ...]:
+        """The lines under the gauges, most important first, at most MAX_LINES."""
+        hint = (Line(self.hint, "unknown"),) if self.hint else ()
+        return (self.notes + hint)[:MAX_LINES]
 
 
 @dataclass(frozen=True)
@@ -128,7 +136,7 @@ class Callout:
     def size(self) -> tuple[int, int]:
         if not self.in_view:
             return CHIP_W, CHIP_H
-        return BOX_W, BOX_H + (HINT_H if self.card.hint else 0)
+        return BOX_W, BOX_H + HINT_H * len(self.card.lines)
 
 
 @dataclass
@@ -211,7 +219,51 @@ def card_for(signs: dict, context: dict | None = None) -> Card:
         bleed = Gauge("BLOOD", _marked("NOT SEEN", blood))
     else:
         bleed = Gauge("BLOOD", UNKNOWN, "unknown")
-    return Card(move, breath, eye, respond, bleed, hint)
+    return Card(move, breath, eye, respond, bleed, hint, _notes(signs, context))
+
+
+def _ago(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    return f"{seconds} s" if seconds < 60 else f"{seconds // 60}:{seconds % 60:02d}"
+
+
+_CHANGE_NOTES = {   # (sign, new value): text with {ago} and {was}; only changes toward a notable value
+    ("eyes", "closed"): "Eyes closed {ago} ago, were {was}",
+    ("response", "no_response"): "No response now, responded before",
+    ("breathing", "no_motion_detected"): "No chest motion for {ago}",
+    ("visible_blood", "detected"): "Blood first seen {ago} ago",
+    ("posture", "lying"): "Lying for {ago}, was {was}",
+}
+
+
+def _notes(signs: dict, context: dict) -> tuple[Line, ...]:
+    """What happened, most important first: fall, blood spreading, a change, limbs, walking."""
+    notes = []
+    if signs.get("fall", {}).get("value") == "seen":
+        ago = context.get("fall_ago_s")
+        notes.append(Line("Fall seen" + (f" {_ago(ago)} ago" if ago is not None else ""), "attention"))
+    spread = signs.get("blood_spread", {})
+    if spread.get("value") == "growing":
+        notes.append(Line(f"Blood area growing, +{spread['change_pct']}% in {spread['window_s']:.0f} s",
+                          "attention"))
+    changes = signs.get("changes", [])
+    ages = context.get("changes_ago_s", [])
+    for index in range(len(changes) - 1, -1, -1):
+        change = changes[index]
+        text = _CHANGE_NOTES.get((change["sign"], change["to"]))
+        if text:
+            ago = ages[index] if index < len(ages) else None
+            if ago is not None or "{ago}" not in text:
+                notes.append(Line(text.format(ago=_ago(ago or 0), was=change["from"].replace("_", " ")),
+                                  "attention"))
+                break
+    limbs = signs.get("limbs", {})
+    if limbs.get("value") == "some_not_moved":
+        names = ", ".join(REGION_NAMES.get(n, n) for n in limbs["not_moved"])
+        notes.append(Line(f"Not moved in {limbs['window_s']:.0f} s: {names}", "attention"))
+    if signs.get("walking", {}).get("value") == "seen" and context.get("walked_ago_s") is not None:
+        notes.append(Line(f"Walked {_ago(context['walked_ago_s'])} ago"))
+    return tuple(notes)
 
 
 def track_number(track) -> int:
@@ -412,9 +464,9 @@ def _box(callout: Callout, scale: float) -> tuple[np.ndarray, np.ndarray]:
         draw.line(((left * k, 37 * k), ((width - 12) * k, 37 * k)), fill=(255, 255, 255, 34), width=max(1, round(k)))
         for index, gauge in enumerate(card.gauges):
             _gauge(draw, EDGE_W + 6 + index * GAUGE_W, 40, gauge, k)
-        if card.hint:
-            _text(draw, (width + EDGE_W) / 2, BOX_H + 4, card.hint, "label", 11.5, GREY, k,
-                  max_width=width - 28, anchor="mm")
+        for index, line in enumerate(card.lines):
+            _text(draw, (width + EDGE_W) / 2, BOX_H + 4 + index * HINT_H, line.text, "label", 12,
+                  STATE_COLORS[line.state], k, max_width=width - 28, anchor="mm")
 
     size = (round(width * scale), round(height * scale))
     pixels = np.asarray(image.resize(size, Image.LANCZOS), dtype=np.float32)

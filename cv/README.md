@@ -307,6 +307,10 @@ switches to the debug view with FPS, track states and publisher counters):
   it watches after a command). A trailing `?` marks a low confidence. When
   breathing cannot be measured, one grey line says why ("Hold the camera
   still to measure breathing", "Chest not visible").
+- **What happened, under the gauges:** up to two short notes from the history
+  observations below, most important first: "Fall seen 1:20 ago", "Blood area
+  growing, +45% in 30 s", "Eyes closed 40 s ago, were open", "Not moved in
+  30 s: L LEG", then "Walked 2:10 ago" in white.
 - **Placement:** a card goes beside its person where it covers no other card,
   no one's chest point and as few faces and bodies as possible, and where its
   line crosses no other line, card or face. It glides, and jumps rather than
@@ -335,6 +339,26 @@ A pulse would need a contact sensor on the casualty. `signs_report
 | eyes | MediaPipe Face Landmarker blink scores on a face crop rotated level (works for faces lying sideways). Head turned more than 25°: the higher eye score; more than 60°: `not_testable`. The model downloads into `cv/models/` on first use | Face ≥ 36 px across; at 2–3 m use 1080p capture |
 | breathing | Optical flow on the chest while still; rate only from a clear rhythm, same in both halves of 15 s | Person still ~11 s, chest visible |
 | visible blood | Deep-red pixels (green and blue ≤ 0.35 × red, hue ≤ 10 or ≥ 174) per body region: head, torso, arms, legs | No red, pink or magenta clothing or props: their shadows are blood-colored |
+
+**History observations** (on by default, `signs.history`). These follow the
+first questions of START triage (did they walk, did they fall, is the
+bleeding getting worse, has anything changed), answered only with what the
+camera saw. The responder assigns the triage tag; CV never does.
+
+| Sign | How | Needs |
+| --- | --- | --- |
+| fall | The head drops by at least half the standing height within 1 s from standing or sitting, and the person ends lying (or in a flat box) within 5 s. Lying down slowly or sitting down fast is not a fall | Whole body in view before and after |
+| walking | Standing in at least 80% of 4 s and moving at least 0.8 body heights across the floor | Feet in view |
+| limbs | For each arm and leg, whether it moved relative to the body in the last 30 s; `some_not_moved` lists the ones that did not | Limbs visible for 15 s |
+| blood_spread | Red area relative to body size, now vs 30 s ago: `growing` at 1.3× or more, `shrinking` below 1/1.3 | Blood detected; same light |
+| changes | The last 5 changes of posture, movement, response, eyes, breathing or blood, each held for 3 s | — |
+
+A moving camera pauses fall, walking and limbs (`not_testable`,
+`camera_moving`) and starts them over. They are not sent until the backend
+accepts them: `--send-history` (with `--send-signs`) turns that on once Prince
+adds the models in `history_contract.py` ("History signs" in
+`CONTRACT_PROPOSAL.md`). Until then they appear in the window, `signs_report`
+and `validate` only.
 
 Before the demo, check the actual fake blood under the room light: run
 `--signs`, put blood on one actor, and confirm `blood: <region>` appears and
@@ -372,7 +396,8 @@ Results (Nov 14):
 | Data | What it showed |
 | --- | --- |
 | CEW, 2,423 labelled faces | Face found 98–100%. Eyes 95.5% correct at threshold 0.4 (closed 94.6%, open 96.3%). The old 0.5 missed 15% of closed eyes |
-| UR Fall, 10 falls (320×240 Kinect) | 9 of 10 end as `lying`; 6 of 10 keep one ID through the fall. Without floor calibration the tracker cannot re-attach a person after a split |
+| UR Fall, 10 falls (320×240 Kinect) | 9 of 10 end as `lying`; 6 of 10 keep one ID through the fall. Without floor calibration the tracker cannot re-attach a person after a split. `fall: seen` in 8 of 10 (the two misses lose the person mid-fall) |
+| Stock clips of people lying, sleeping, car crash (6) | No false `fall` |
 | Pexels sleeping man, side profile | Eyes `closed` 88% of testable samples. Before the turned-head fix, 0%: the hidden eye's score dragged the mean to "open" |
 | Pexels three men lying, overhead | Eyes follow the clip: closed 0–6 s, open about 7–15 s, closing again |
 | Mixkit car-crash head wound | Blood `detected` on the head 55% of samples (the wound is out of view in most of the rest). Before the head threshold (2%), 0% |
@@ -382,7 +407,7 @@ Results (Nov 14):
 ### Validation takes and the benchmark (one command)
 
 ```sh
-python -m cv.tools.validate --list               # the 12 takes and how to do each
+python -m cv.tools.validate --list               # the 18 takes and how to do each
 python -m cv.tools.record --take breathe-12      # Logitech by default; a voice reads the setup and cues
 python -m cv.tools.validate                      # score every take and every benchmark clip (~2 min)
 ```
@@ -392,9 +417,13 @@ reads the setup, gives 15 s to get in place, then paces breathing ("in",
 "out" at 12 or 20 per minute), says "hold", "close your eyes", or gives the
 spoken command, so whoever lies on the floor does not need to see the screen.
 Takes: `breathe-12`, `breathe-20`, `breathe-blanket`, `breath-hold`,
-`eyes-open-closed`, `response-yes`, `response-no`, `blood-left-arm`, and the
-false-alarm takes `clean`, `red-clothing`, `led-grid`, `red-props`. Clips go
-to `cv/recordings/validation/` (git-ignored) with the take in the sidecar.
+`eyes-open-closed`, `response-yes`, `response-no`, `blood-left-arm`, the
+false-alarm takes `clean`, `red-clothing`, `led-grid`, `red-props`, and for
+the history observations `fall-to-mat` (onto a thick mat, knees first, never
+thrown), `lie-down-slowly` and `sit-down` (must not read as a fall), `walk`,
+`one-arm` (only the right arm moves) and `blood-spreading` (more fake blood
+added mid-take). Clips go to `cv/recordings/validation/` (git-ignored) with
+the take in the sidecar.
 
 `validate` scores each check 0–1 (higher is better) inside its time window:
 breathing rate within 2/min of the pace, no rate while the breath is held,
@@ -458,9 +487,11 @@ caffeinate -is python -m cv.main --config cv/config/rooms.yaml --signs --mock-ba
   --duration 21600 --summary-json cv/artifacts/soak-6h.json
 ```
 
-The first hour (Nov 14) ran at 25 FPS with the same 3 people throughout
-(their IDs survived every loop of the clip), and peak memory stayed flat at
-690 MB.
+The full 6 h run (Nov 14, `cv/artifacts/soak-6h.json`): 540,000 frames at
+25 FPS, the same 3 people throughout (3 tracks created; their IDs survived
+all 1,093 loops of the clip), 59,697 reports accepted with none rejected and
+no network errors, publish latency 52 ms median / 90 ms p95, and peak memory
+flat at 677–690 MB.
 
 ### Fake casualties (no camera needed)
 
@@ -580,7 +611,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-176 tests. The suite covers:
+185 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.
@@ -598,6 +629,12 @@ python -m pytest cv/tests
   no_response only when watched, blood on the torso vs skin and pink cloth,
   breathing rate under noise and no false rate from 300 noise-only windows,
   level face crops for sideways faces, signs sent only on visible reports.
+- History observations: a fast drop is a fall and lying down slowly is not;
+  walking vs standing and crawling; one arm moving leaves the other limbs
+  listed as not moved; a change counts only once it holds; blood spread
+  growing vs stable; a moving camera pausing them; a real snapshot fitting
+  the proposed backend models; and the keys kept off the wire until the
+  backend accepts them.
 - Fake casualties: the scripted timeline, and the whole scene accepted by the
   in-process backend.
 - Responder view: amber findings, grey reasons, listening countdown, no
