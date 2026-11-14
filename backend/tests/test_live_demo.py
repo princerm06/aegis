@@ -114,11 +114,11 @@ def test_base_url_mode_replays_against_a_running_server(server):
 
 def test_prepare_only_leaves_real_components_to_drive_the_state(server):
     summary = live_demo.prepare(server)
-    assert summary["cameras"] == {LOGITECH: "calibrated_world", PHONE: "predefined_zones"}
+    assert summary["cameras"] == {LOGITECH: "pending_cv_registration", PHONE: "predefined_zones"}
     assert summary["casualties"] == ["casualty-actor-a", "casualty-actor-b"]
     with live_demo.UrlClient(server) as client:
         state = client.request("GET", live_demo.PREFIX + "/state").json()
-    assert {camera["camera_id"] for camera in state["cameras"]} == {LOGITECH, PHONE}
+    assert {camera["camera_id"] for camera in state["cameras"]} == {PHONE}
     assert state["tracks"] == [] and state["approvals"] == [] and state["dispatches"] == []
     assert state["assignments"] == []
     assert all(c["medical_assessment"] is None for c in state["scenario"]["casualties"])
@@ -126,6 +126,17 @@ def test_prepare_only_leaves_real_components_to_drive_the_state(server):
     types = {event["type"] for event in state_events(server)}
     assert not types & {"simulation.observation_received", "simulation.track_associated",
                         "simulation.device_delivered", "simulation.approval_invalidated"}
+
+
+
+def test_prepare_only_allows_explicit_real_calibration_reference(server):
+    summary = live_demo.prepare(server, calibration_ref="taped-floor-real-v1")
+    assert summary["cameras"] == {LOGITECH: "calibrated_world", PHONE: "predefined_zones"}
+    with live_demo.UrlClient(server) as client:
+        state = client.request("GET", live_demo.PREFIX + "/state").json()
+    cameras = {camera["camera_id"]: camera for camera in state["cameras"]}
+    assert cameras[LOGITECH]["calibration_ref"] == "taped-floor-real-v1"
+
 
 
 def state_events(server):

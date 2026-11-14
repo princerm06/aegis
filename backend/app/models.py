@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 
 Identifier = Annotated[str, Field(min_length=1)]
@@ -55,6 +55,79 @@ class CVTrack(ContractModel):
         return self
 
 
+# Camera measurements are advisory evidence, never clinical diagnoses or priorities.
+SignConfidence = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
+SignDuration = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+
+
+class CameraSign(ContractModel):
+    value: str
+    confidence: SignConfidence
+    reason: str | None = None
+
+
+class PostureSign(CameraSign):
+    value: Literal["standing", "sitting", "lying", "unknown"]
+
+
+class MovementSign(CameraSign):
+    value: Literal["moving", "still", "not_testable"]
+    still_for_s: SignDuration | None = None
+
+
+class ResponseSign(CameraSign):
+    value: Literal["responded", "no_response", "not_tested"]
+    command_at: AwareDatetime | None = None
+
+
+class EyesSign(CameraSign):
+    value: Literal["open", "closed", "not_testable"]
+
+
+class BreathingMotionSign(CameraSign):
+    value: Literal["motion_detected", "no_motion_detected", "not_testable"]
+    rate_bpm: Annotated[float, Field(gt=0, le=40, allow_inf_nan=False)] | None = None
+
+
+class VisibleColorSign(CameraSign):
+    value: Literal["detected", "not_detected", "not_testable"]
+    regions: list[Literal["head", "torso", "left_arm", "right_arm", "left_leg", "right_leg"]] | None = None
+    method: Literal["color", "model"] | None = None
+
+
+class CameraMotion(ContractModel):
+    value: Literal["still", "steady", "moving", "unknown"]
+    speed_px_s: SignDuration | None = None
+
+
+class CameraSigns(ContractModel):
+    schema_version: Literal["aegis-cv-signs/0.1"] = Field(alias="schema")
+    window_s: Annotated[float, Field(gt=0, le=300, allow_inf_nan=False)]
+    posture: PostureSign
+    movement: MovementSign
+    response: ResponseSign
+    eyes: EyesSign | None = None
+    breathing: BreathingMotionSign | None = None
+    visible_blood: VisibleColorSign | None = None
+    camera_motion: CameraMotion | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_wire_schema(self, handler):
+        # Preserve the CV producer's external "schema" key in nested snapshots/events.
+        values = handler(self)
+        if "schema_version" in values:
+            values["schema"] = values.pop("schema_version")
+        return values
+
+    @model_validator(mode="after")
+    def validate_observed_measurements(self) -> "CameraSigns":
+        if self.breathing is not None and self.breathing.rate_bpm is not None and self.breathing.value != "motion_detected":
+            raise ValueError("rate_bpm is only permitted for detected chest motion")
+        if self.visible_blood is not None and self.visible_blood.regions and self.visible_blood.value != "detected":
+            raise ValueError("regions require detected visible color")
+        return self
+
+
 class CVObservation(ContractModel):
     id: Identifier
     source: Literal["cv"]
@@ -63,11 +136,14 @@ class CVObservation(ContractModel):
     kind: Literal["person_detected"]
     confidence: Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
     track: CVTrack | None = None
+    signs: CameraSigns | None = None
 
     @model_validator(mode="after")
     def validate_track_time(self) -> "CVObservation":
         if self.track is not None and self.track.last_seen_at > self.observed_at:
             raise ValueError("last_seen_at must not follow observed_at")
+        if self.signs is not None and (self.track is None or self.track.state != "visible"):
+            raise ValueError("signs are only valid on visible tracked observations")
         return self
 
 

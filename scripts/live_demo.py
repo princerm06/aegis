@@ -260,27 +260,29 @@ def reset_scene(rehearsal):
     return state
 
 
-def register_cameras(rehearsal):
+def register_cameras(rehearsal, *, register_logitech=True, calibration_ref=CALIBRATION_REF):
     """Step 2: the two camera mappings; reports themselves come from the CV components."""
     rehearsal.step("2. Register both camera mappings")
-    logitech = rehearsal.request("PUT", f"/cameras/{LOGITECH}", {
+    logitech = (rehearsal.request("PUT", f"/cameras/{LOGITECH}", {
         "mode": "simulation", "actor": OPERATOR, "mapping_mode": "calibrated_world",
-        "calibration_ref": CALIBRATION_REF})["result"]
+        "calibration_ref": calibration_ref})["result"] if register_logitech else None)
     phone = rehearsal.request("PUT", f"/cameras/{PHONE}", {
         "mode": "simulation", "actor": OPERATOR, "mapping_mode": "predefined_zones",
         "zones": {PHONE_ZONE: position(*NEAR_ACTOR["xy"])}})["result"]
-    assert logitech["mapping_mode"] == "calibrated_world" and logitech["calibration_ref"] == CALIBRATION_REF
+    if logitech is not None:
+        assert logitech["mapping_mode"] == "calibrated_world" and logitech["calibration_ref"] == calibration_ref
     assert phone["mapping_mode"] == "predefined_zones" and phone["zones"][PHONE_ZONE]["x_m"] == NEAR_ACTOR["xy"][0]
-    rehearsal.note(f"{LOGITECH}: calibrated_world via {CALIBRATION_REF}; {PHONE}: predefined_zones {PHONE_ZONE}")
-    return {LOGITECH: logitech["mapping_mode"], PHONE: phone["mapping_mode"]}
+    rehearsal.note(f"{LOGITECH}: " + (f"calibrated_world via {calibration_ref}" if logitech else "registration left to live CV") + f"; {PHONE}: predefined_zones {PHONE_ZONE}")
+    return {LOGITECH: logitech["mapping_mode"] if logitech else "pending_cv_registration", PHONE: phone["mapping_mode"]}
 
 
-def prepare(base_url, narrate=None):
+def prepare(base_url, narrate=None, *, calibration_ref=None):
     """Reset and register mappings on a running server, then stop for live components to drive."""
     with UrlClient(base_url) as client:
         rehearsal = Rehearsal(client, narrate)
         state = reset_scene(rehearsal)
-        cameras = register_cameras(rehearsal)
+        cameras = register_cameras(rehearsal, register_logitech=calibration_ref is not None,
+                                   calibration_ref=calibration_ref)
         return {"mode": state["mode"], "scenario_id": state["scenario_id"], "scene_revision": state["scene_revision"],
                 "casualties": [c["id"] for c in state["scenario"]["casualties"]], "cameras": cameras,
                 "http_requests": len(rehearsal.calls)}
@@ -505,15 +507,18 @@ def main(argv=None):
     parser.add_argument("--prepare-only", action="store_true",
                         help="with --base-url: reset the two unassessed actors and register the two camera "
                              "mappings only, then exit so real components can drive the same state")
+    parser.add_argument("--calibration-ref", help="with --prepare-only: explicitly register the Logitech camera using this external calibration reference; otherwise live CV registers it")
     parser.add_argument("--json", action="store_true", help="print only the JSON summary")
     arguments = parser.parse_args(argv)
     if arguments.prepare_only and not arguments.base_url:
         parser.error("--prepare-only requires --base-url")
+    if arguments.calibration_ref is not None and not arguments.prepare_only:
+        parser.error("--calibration-ref requires --prepare-only")
     narrate = None if arguments.json else print
     if narrate:
         print("SIMULATION ONLY: synthetic cameras and device events; no real actors, camera or Arduino effects.")
     if arguments.prepare_only:
-        summary = prepare(arguments.base_url, narrate)
+        summary = prepare(arguments.base_url, narrate, calibration_ref=arguments.calibration_ref)
         if arguments.json:
             print(json.dumps(summary, indent=2))
         else:

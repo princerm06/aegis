@@ -30,6 +30,7 @@ from backend.app.models import (
     Assignment,
     Casualty,
     CVObservation,
+    CameraSigns,
     MedicalAssessment,
     Obstacle,
     OccupancyGrid,
@@ -171,6 +172,8 @@ class _Track:
     count: int = 1
     casualty_id: str | None = None
     camera: CameraProvenance | None = None
+    latest_visible_signs: CameraSigns | None = None
+    signs_observed_at: datetime | None = None
 
 
 @dataclass
@@ -1106,7 +1109,7 @@ class SimulationStore:
             observation = CVObservation(
                 id=_camera_id(camera_id, body.id), source="cv", observed_at=body.observed_at,
                 position=position.model_copy(deep=True), kind="person_detected",
-                confidence=body.confidence, track=track,
+                confidence=body.confidence, track=track, signs=body.signs,
             )
             provenance = CameraProvenance(
                 camera_id=camera_id, local_observation_id=body.id,
@@ -1159,6 +1162,9 @@ class SimulationStore:
                     raise _conflict(f"A {track.state} report must retain the last actual "
                                     "detection's position, confidence and last_seen_at")
                 record.latest = observation.model_copy(deep=True)
+                if observation.signs is not None:
+                    record.latest_visible_signs = observation.signs.model_copy(deep=True)
+                    record.signs_observed_at = observation.observed_at
                 record.count += 1
                 record.camera = provenance.model_copy() if provenance else None
                 casualty_id = record.casualty_id
@@ -1176,7 +1182,9 @@ class SimulationStore:
             else:
                 session.tracks[track.track_id] = _Track(
                     track.track_id, observation.model_copy(deep=True),
-                    camera=provenance.model_copy() if provenance else None)
+                    camera=provenance.model_copy() if provenance else None,
+                    latest_visible_signs=observation.signs.model_copy(deep=True) if observation.signs else None,
+                    signs_observed_at=observation.observed_at if observation.signs else None)
         session.observation_fingerprints[observation.id] = fingerprint
         session.emit("simulation.observation_received",
                      {"observation": _dump(observation),
@@ -1577,7 +1585,9 @@ class SimulationStore:
         tracks = [TrackRecord(track_id=t.track_id, casualty_id=t.casualty_id,
                               latest_observation=t.latest.model_copy(deep=True),
                               observation_count=t.count,
-                              camera=t.camera.model_copy() if t.camera else None)
+                              camera=t.camera.model_copy() if t.camera else None,
+                              latest_visible_signs=t.latest_visible_signs.model_copy(deep=True) if t.latest_visible_signs else None,
+                              signs_observed_at=t.signs_observed_at)
                   for t in sorted(session.tracks.values(), key=lambda t: t.track_id)]
         return SimulationState(
             scenario_id=session.scenario_id, epoch=session.epoch,

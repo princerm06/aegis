@@ -15,6 +15,7 @@ from backend.app.models import (
     ContractModel,
     CVObservation,
     CVTrack,
+    CameraSigns,
     Identifier,
     Position,
     RecommendationMetadata,
@@ -164,6 +165,7 @@ class CameraObservation(ContractModel):
     track: CVTrack
     position: Position | None = None
     zone_id: NonblankIdentifier | None = None
+    signs: CameraSigns | None = None
 
     @model_validator(mode="after")
     def validate_location(self) -> "CameraObservation":
@@ -171,6 +173,8 @@ class CameraObservation(ContractModel):
             raise ValueError("Provide exactly one of position or zone_id")
         if self.track.last_seen_at > self.observed_at:
             raise ValueError("last_seen_at must not follow observed_at")
+        if self.signs is not None and self.track.state != "visible":
+            raise ValueError("signs are only valid on visible tracked observations")
         return self
 
 
@@ -202,6 +206,8 @@ class TrackRecord(ContractModel):
     track_id: Identifier
     casualty_id: Identifier | None
     latest_observation: CVObservation
+    latest_visible_signs: CameraSigns | None = None
+    signs_observed_at: AwareDatetime | None = None
     observation_count: int
     camera: CameraProvenance | None = None
 
