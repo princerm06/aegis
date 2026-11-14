@@ -1,4 +1,10 @@
-"""Bounded CPU PPO training over the synthetic allocation env."""
+"""Bounded CPU PPO training over pooled synthetic allocation scenarios.
+
+Each model trains over a deterministic pool of scenario seeds that
+cycles episode by episode, never repeating one static scene. The PPO
+random seed is independent of the scenario pool. Heldout eval seeds
+stay disjoint from every training pool.
+"""
 
 from __future__ import annotations
 
@@ -8,24 +14,26 @@ import json
 import platform
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 
 from ppo_experiment import _rootpath as _rp
 
 _rp.ensure_parent_on_path()
 
-from ppo_experiment.env import AllocationEnv  # noqa: E402
+from ppo_experiment.env import AllocationEnv
+from ppo_experiment.scenarios import TRAIN_SEEDS
 
 DEFAULT_TIMESTEPS = 8192
 
 
-def train(seed: int, timesteps: int, outdir: str) -> dict:
+def train(seed: int, train_seeds: list[int], timesteps: int, outdir: str) -> dict:
     import stable_baselines3
     import torch
     from stable_baselines3 import PPO
 
     started = datetime.now(timezone.utc)
-    wall_start = __import__("time").perf_counter()
-    env = AllocationEnv(scenario_seed=seed)
+    wall_start = perf_counter()
+    env = AllocationEnv(scenario_seed=train_seeds[0], train_seeds=tuple(train_seeds))
     model = PPO(
         "MlpPolicy",
         env,
@@ -44,11 +52,13 @@ def train(seed: int, timesteps: int, outdir: str) -> dict:
     path = out / f"ppo_allocation_train{seed}.zip"
     model.save(str(path.with_suffix("")))
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    obs_dim = int(env.observation_space.shape[0])
     record = {
         "training_seed": seed,
-        "scenario_seed": seed,
+        "scenario_pool": list(train_seeds),
         "total_timesteps": timesteps,
         "policy": "MlpPolicy",
+        "observation_dim": obs_dim,
         "n_steps": 512,
         "batch_size": 64,
         "n_epochs": 4,
@@ -62,7 +72,7 @@ def train(seed: int, timesteps: int, outdir: str) -> dict:
         "weights_file": path.name,
         "weights_sha256": digest,
         "started_at": started.isoformat(),
-        "wall_seconds": __import__("time").perf_counter() - wall_start,
+        "wall_seconds": perf_counter() - wall_start,
     }
     (out / f"train_{seed}.json").write_text(json.dumps(record, indent=2))
     return record
@@ -71,10 +81,11 @@ def train(seed: int, timesteps: int, outdir: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--train-seeds", type=int, nargs="+", default=list(TRAIN_SEEDS))
     parser.add_argument("--timesteps", type=int, default=DEFAULT_TIMESTEPS)
     parser.add_argument("--outdir", type=str, required=True)
     args = parser.parse_args()
-    record = train(args.seed, args.timesteps, args.outdir)
+    record = train(args.seed, args.train_seeds, args.timesteps, args.outdir)
     print(json.dumps(record, indent=2))
 
 

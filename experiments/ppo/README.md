@@ -23,9 +23,14 @@ synthetic scenario bundle:
 
 - Reset builds assignment state from the scenario seed and calls
   `super().reset(seed=seed)`.
-- Observation is a fixed unit-range vector: per-casualty position,
-  allocation priority, and assigned flag; per-responder position,
-  availability flag, and assigned flag; plus step fraction.
+- Observation is a fixed 53-dim unit-range vector: per-casualty
+  position, priority, and assigned flag; per-responder position,
+  availability flag, and assigned flag; the full pair feasibility
+  mask with normalized A* route costs on the exact graph the solver
+  sees; plus step fraction. The policy has no
+  partial-observability excuse for any gap to the optimizer.
+- Episodes cycle a deterministic pool of training scenario seeds
+  while heldout seeds stay disjoint and fixed.
 - Action `Discrete(C*R+1)`: each index names one casualty/responder
   pair, the last index is stop.
 - Transition commits a feasible pair, blocks anything else.
@@ -36,8 +41,10 @@ synthetic scenario bundle:
   separately.
 
 Hard safety uses the same gates as the core solver: responder
-availability, capability compatibility, and verified A* routes on the
-shared scene map, plus one-to-one assignment. Blocked proposals are
+availability, capability compatibility, core observation and
+tracking reasons (stale, lost, low-confidence, position mismatch),
+and verified A* routes on the shared scene map, plus one-to-one
+assignment. Blocked proposals are
 counted as invalid attempts before commitment. Committed safety
 violations are counted separately and must stay zero. Blocking an
 invalid proposal is filtering, not learned safety, and is reported
@@ -45,13 +52,21 @@ that way.
 
 ## Identical conditions for all contenders
 
-Every contender sees the same fixed scenario bundles (train seeds
-disjoint from eval seeds). OR-Tools and nearest run one-shot through
-the real `optimization.solver.optimize`. PPO rolls out sequentially
-in the env with deterministic actions. Metrics per scenario are
-assigned count, allocation priority points, travel distance,
-unassigned count, runtime, invalid attempts, and committed
-violations. Underperformance by PPO is accepted and reported as-is.
+Every contender sees the same fixed scenario bundles. Each PPO
+model trains over a deterministic pool of scenario seeds (101-104)
+that cycles episode by episode, while heldout eval seeds 901-904
+stay disjoint from every training pool. OR-Tools and nearest run
+one-shot through the real `optimization.solver.optimize`. PPO rolls
+out sequentially in the env with deterministic actions. All
+committed pairs pass through the shared independent validator
+(`validator.py`), so baseline violations would be reported rather
+than assumed away. Metrics per scenario are assigned count,
+allocation priority points, travel distance, unassigned count,
+prep/run/total timing, invalid attempts, and committed violations.
+Timing compares prep-plus-run totals after a warmup moves imports,
+model loading, and first-call optimizer setup outside measurement;
+no speed ranking is claimed from cold-start effects.
+Underperformance by PPO is accepted and reported as-is.
 
 ## Setup
 
@@ -71,8 +86,8 @@ PYTHONPATH=src uv run pytest
 
 ```sh
 cd experiments/ppo
-PYTHONPATH=src uv run python -m ppo_experiment.train --seed 101 --timesteps 8192 --outdir weights
-PYTHONPATH=src uv run python -m ppo_experiment.train --seed 102 --timesteps 8192 --outdir weights
+PYTHONPATH=src uv run python -m ppo_experiment.train --seed 101 --train-seeds 101 102 103 104 --timesteps 8192 --outdir weights
+PYTHONPATH=src uv run python -m ppo_experiment.train --seed 102 --train-seeds 101 102 103 104 --timesteps 8192 --outdir weights
 ```
 
 ## Evaluate heldout scenarios
@@ -94,3 +109,35 @@ env = AllocationEnv(scenario_seed=901)
 obs, info = env.reset(seed=0)
 obs, reward, terminated, truncated, info = env.step(0)
 ```
+
+## Measured results (2026-11-14)
+
+Two PPO models (seeds 101/102, 8192 CPU steps each, scenario pool
+101-104, obs dim 53) vs OR-Tools and nearest on heldout seeds
+901-904. Full rows in `reports/eval_results.md`, config and weight
+SHAs in `reports/training.json`.
+
+- OR-Tools: 8 assigned / 16.0 points over 4 seeds, 0 violations.
+- Nearest: 8 assigned / 14.0 points, 0 violations.
+- PPO seed 101: 4 assigned / 8.0 points, 0 violations,
+  48 invalid attempts.
+- PPO seed 102: 6 assigned / 10.0 points, 0 violations,
+  41 invalid attempts.
+- Weights: `a5f66cbb...` (train101), `3d7106d0...` (train102);
+  binaries stay local, SHAs committed.
+
+The optimizer leads on every heldout seed. PPO trails without a
+single committed violation; eval seeds were not tuned.
+
+## Limitations
+
+- Tiny synthetic grids only: no responder motion, no mid-episode
+  casualties, no sensor noise beyond gate fixtures.
+- Blocked proposals are filtered before commitment; invalid-attempt
+  counts measure filtering, not learned safety.
+- PPO sees the full feasibility mask and route costs, so the gap to
+  the optimizer is not a partial-observability artifact.
+- Bounded compute (8192 steps, CPU, default PPO hyperparameters);
+  larger budgets might narrow the gap and were not tried.
+- Timing compares research-harness totals, not deployment latency.
+  Nothing here authorizes operational use.

@@ -6,5 +6,6 @@ not medical assessments, and never authorize deployment or field use.
 
 from ppo_experiment.env import AllocationEnv
 from ppo_experiment.scenarios import TRAIN_SEEDS, EVAL_SEEDS, build_bundle
+from ppo_experiment.validator import validate
 
-__all__ = ["AllocationEnv", "TRAIN_SEEDS", "EVAL_SEEDS", "build_bundle"]
+__all__ = ["AllocationEnv", "TRAIN_SEEDS", "EVAL_SEEDS", "build_bundle", "validate"]

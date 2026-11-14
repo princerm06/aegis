@@ -15,7 +15,7 @@ from ppo_experiment import _rootpath as _rp
 
 _rp.ensure_parent_on_path()
 
-from backend.app.models import (  # noqa: E402
+from backend.app.models import (
     Casualty,
     CVObservation,
     CVTrack,
@@ -27,7 +27,7 @@ from backend.app.models import (  # noqa: E402
     Scenario,
     SceneMap,
 )
-from optimization.models import OptimizationRequest  # noqa: E402
+from optimization.models import OptimizationRequest
 
 FRAME_ID = "map"
 GRID_W = 10
@@ -37,7 +37,7 @@ MAX_CASUALTIES = 4
 MAX_RESPONDERS = 3
 CAPABILITIES = ("als", "bls")
 
-TRAIN_SEEDS = (101, 102)
+TRAIN_SEEDS = (101, 102, 103, 104)
 EVAL_SEEDS = (901, 902, 903, 904)
 
 NOW = datetime(2026, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
