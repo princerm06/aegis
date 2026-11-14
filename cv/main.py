@@ -28,7 +28,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
-from cv.camera import Camera
+from cv.camera import Camera, camera_override, describe_cameras, list_cameras
 from cv.clock import Timebase, iso_utc, session_id
 from cv.homography import Calibration, CalibrationError
 from cv.publisher import HttpTransport, MockTransport, Publisher
@@ -44,7 +44,8 @@ WINDOW = "AEGIS CV (q / Esc to quit)"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="AEGIS CV pipeline")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="pipeline YAML")
-    parser.add_argument("--camera", type=int, help="camera index (overrides config)")
+    parser.add_argument("--camera", help="camera index or name, e.g. 0 or C922 (overrides config)")
+    parser.add_argument("--list-cameras", action="store_true", help="print camera indexes and names, then exit")
     parser.add_argument("--camera-id", help="backend camera ID, e.g. phone-1 (overrides config)")
     parser.add_argument("--source", help="video file to replay instead of the camera")
     parser.add_argument("--loop", action="store_true", help="replay: restart the file at its end")
@@ -66,8 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
-    if args.camera is not None:
-        settings = replace(settings, camera=replace(settings.camera, index=args.camera))
+    settings = replace(settings, camera=camera_override(settings.camera, args.camera))
     if args.model:
         settings = replace(settings, detector=replace(settings.detector, model=args.model))
     publisher = settings.publisher
@@ -483,6 +483,9 @@ def print_summary(summary: dict) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.list_cameras:
+        print(describe_cameras(list_cameras()).replace(", ", "\n"))
+        return 0
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s", stream=sys.stderr)
     try:

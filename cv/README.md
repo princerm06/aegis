@@ -46,15 +46,21 @@ The app that launches Python needs camera access: **System Settings → Privacy 
 Security → Camera**, enable Terminal / iTerm / Cursor, then restart that app.
 The first run triggers the prompt and fails; run again after allowing.
 
-Camera indices follow AVFoundation's order and **change when devices connect**
-(the iPhone moved from 3 to 2 during testing). Check before each session:
+Camera numbers **change when devices connect** (the iPhone moved from 3 to 2
+during testing), so the configs pick cameras by name: `camera.name: C922` for
+the Logitech (`pipeline.yaml`, `rooms.yaml`) and `iPhone` for a Continuity
+Camera (`phone.yaml`, `bodycam.yaml`, matched by model whatever the phone is
+called). The number is looked up each time the camera opens; if no camera has
+that name, the pipeline waits and logs what is connected instead of opening
+another camera. Override with `--camera 1` or `--camera FaceTime`.
 
 ```sh
-ffmpeg -hide_banner -f avfoundation -list_devices true -i "" 2>&1 | grep "\]"
+python -m cv.main --list-cameras     # 0: C922 Pro Stream Webcam, 1: FaceTime HD Camera, 2: Askar Camera
 ```
 
-On the dev MacBook: 0 = Logitech C922, 1 = FaceTime, 2 = iPhone (Continuity
-Camera), 3 = iPhone Desk View. Pass `--camera N` when it differs.
+Do not use `ffmpeg -list_devices` for the number: ffmpeg lists the built-in
+camera first, OpenCV does not. Name lookup needs `pyobjc-framework-AVFoundation`
+(in `requirements.txt`); without it the configured `index` is used.
 
 ## 1. Calibrate the staged floor into the demo map
 
@@ -73,7 +79,7 @@ at (14, 8) from `docs/LIVE_DEMO.md`.
 4. Run:
 
 ```sh
-python -m cv.tools.calibrate --camera 0 --offset 12 6
+python -m cv.tools.calibrate --offset 12 6        # the Logitech, by name
 ```
 
 5. SPACE freezes the live frame. Click each tape mark (right-click or Backspace
@@ -105,7 +111,7 @@ python -m cv.main --mock-backend                   # print the JSON, no backend 
 
 | Flag | Meaning |
 | --- | --- |
-| `--camera N` | Camera index (config: `camera.index`) |
+| `--camera N` | Camera index or name, e.g. `0` or `C922` (config: `camera.name`, `camera.index`) |
 | `--camera-id ID` | Backend camera ID (config: `publisher.camera_id`) |
 | `--source FILE` | Replay a recording, paced to its measured FPS; `--loop` restarts it, `--no-pace` runs flat out |
 | `--mock-backend` | Log requests to stdout and `cv/artifacts/mock_<camera>.jsonl` instead of sending (`--quiet-mock`: file only) |
@@ -171,7 +177,7 @@ room, which the backend places at that room's point as a `zone_estimate`.
 
 ```sh
 python -m cv.main --config cv/config/rooms.yaml --room room-2 --signs     # fixed camera in a room
-python -m cv.main --config cv/config/rooms.yaml --room room-3 --camera 1 --camera-id room-cam-2
+python -m cv.main --config cv/config/rooms.yaml --room room-3 --camera FaceTime --camera-id room-cam-2
 python -m cv.main --config cv/config/bodycam.yaml --room room-1           # moving camera
 ```
 
@@ -480,7 +486,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-157 tests. The suite covers:
+161 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.

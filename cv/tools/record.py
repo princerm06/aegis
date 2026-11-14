@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
-from cv.camera import Camera
+from cv.camera import Camera, camera_override
 from cv.clock import iso_utc
 from cv.recording import write_sidecar
 from cv.settings import CV_DIR, DEFAULT_CONFIG, load_settings, resolve
@@ -34,7 +34,7 @@ FPS_PROBE_S = 1.0
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Record the camera for replay and evaluation")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG))
-    parser.add_argument("--camera", type=int, help="camera index (overrides config)")
+    parser.add_argument("--camera", help="camera index or name, e.g. 0 or C922 (overrides config)")
     parser.add_argument("--camera-id", help="camera ID stored with the recording (overrides config)")
     parser.add_argument("--homography", help="calibration to store with the recording (overrides config)")
     parser.add_argument("--scenario", default="unlabeled", help="label, also used in the file name")
@@ -68,8 +68,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = build_parser().parse_args(argv)
     settings = load_settings(args.config)
-    if args.camera is not None:
-        settings = replace(settings, camera=replace(settings.camera, index=args.camera))
+    settings = replace(settings, camera=camera_override(settings.camera, args.camera))
     camera_id = args.camera_id or settings.publisher.camera_id
     started_wall = datetime.now(timezone.utc)
     output = Path(args.output) if args.output else (
@@ -143,7 +142,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "scenario": args.scenario,
         "notes": args.notes,
         "started_at_utc": iso_utc(started_wall),
-        "camera": {"index": settings.camera.index, "camera_id": camera_id,
+        "camera": {"index": camera.device_index, "name": camera.device_name, "camera_id": camera_id,
                    "width": size[0], "height": size[1], "requested_fps": settings.camera.fps,
                    "reconnects": camera.reconnects},
         "frames": len(times),

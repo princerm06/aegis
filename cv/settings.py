@@ -18,6 +18,7 @@ DEFAULT_CONFIG = CONFIG_DIR / "pipeline.yaml"
 @dataclass(frozen=True)
 class CameraSettings:
     index: int = 0
+    name: str = ""                  # if set, the index is looked up by this name whenever the camera opens
     width: int = 1280
     height: int = 720
     fps: int = 30

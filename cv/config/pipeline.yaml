@@ -2,7 +2,8 @@
 # directory (cv/config/). Unknown keys are rejected.
 
 camera:
-  index: 0                  # Logitech is not always 0 on macOS; try 1 or 2
+  name: C922                 # found by name each time it opens; index is the fallback off macOS
+  index: 0                  # list with: python -m cv.main --list-cameras (not ffmpeg: its order differs)
   width: 1280
   height: 720
   fps: 30

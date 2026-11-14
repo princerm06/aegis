@@ -203,7 +203,7 @@ def map_check(calibration: Calibration, base_url: str, scenario_id: str) -> bool
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="AEGIS floor calibration")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG))
-    parser.add_argument("--camera", type=int, help="camera index (overrides config)")
+    parser.add_argument("--camera", help="camera index or name, e.g. 0 or C922 (overrides config)")
     parser.add_argument("--image", help="calibrate on an image file instead of the live camera")
     parser.add_argument("--points", help='image points "u,v;u,v;..." (skips clicking)')
     parser.add_argument("--world", help='world points in meters "x,y;x,y;..." (skips prompts)')
@@ -222,7 +222,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.camera is not None:
         from dataclasses import replace
 
-        settings = replace(settings, camera=replace(settings.camera, index=args.camera))
+        from cv.camera import camera_override
+
+        settings = replace(settings, camera=camera_override(settings.camera, args.camera))
     frame_id = args.frame_id or settings.mapping.frame_id
     output = Path(args.output) if args.output else resolve(settings.mapping.homography)
     interactive = not args.yes
