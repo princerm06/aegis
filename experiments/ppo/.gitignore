@@ -2,7 +2,4 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
-weights/*.pt
-weights/*.pth
-weights/*.onnx
-weights/*.zip
+weights/
