@@ -162,7 +162,7 @@ def test_number_keys_pick_rooms_in_config_order():
     assert room_for_key(ord("3"), zones) is None and room_for_key(ord("c"), zones) is None
 
 
-@pytest.mark.parametrize("name", ["rooms.yaml", "bodycam.yaml"])
+@pytest.mark.parametrize("name", ["rooms.yaml", "bodycam.yaml", "demo.yaml"])
 def test_room_configs_load_and_every_room_is_walkable(name):
     settings = load_settings(CONFIG_DIR / name)
     assert settings.mapping.zone_select == "keys"
@@ -172,6 +172,9 @@ def test_room_configs_load_and_every_room_is_walkable(name):
         check = check_area(demo_map(), square(zone.x_m - 0.2, zone.y_m - 0.2, 0.4))
         assert check.walkable, describe_area(check)
     assert settings.signs.moving_camera == (name == "bodycam.yaml")
+    if name == "demo.yaml":
+        assert settings.signs.enabled and settings.tracking.lost_after_s >= 300
+        assert settings.publisher.camera_id != load_settings(CONFIG_DIR / "bodycam.yaml").publisher.camera_id
 
 
 def test_keys_room_selection_needs_zones():

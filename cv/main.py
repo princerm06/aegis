@@ -57,6 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mock-backend", action="store_true", help="log JSON instead of sending it")
     parser.add_argument("--quiet-mock", action="store_true", help="mock mode: write the log file only")
     parser.add_argument("--no-display", action="store_true", help="no debug window")
+    parser.add_argument("--stream-port", type=int, default=0,
+                        help="serve the view as MJPEG on this port for the dashboard tile, e.g. 8090 (0 = off)")
+    parser.add_argument("--stream-host", default="127.0.0.1",
+                        help="stream address; 0.0.0.0 exposes the video to the network")
     parser.add_argument("--duration", type=float, default=0.0, help="stop after N seconds (0 = run)")
     parser.add_argument("--summary-json", help="also write the measured run summary to this file")
     parser.add_argument("--room", help="mapping.zone_select keys: starting room (default: the first zone)")
@@ -216,6 +220,18 @@ def run(args: argparse.Namespace) -> int:
         import cv2
 
         cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+    stream = None
+    if args.stream_port:
+        from cv.stream import FrameStream
+
+        stream = FrameStream(args.stream_host, args.stream_port)
+        stream.start()
+
+    def mark_command(now: float, source: str) -> None:
+        if signs is None:
+            return
+        signs.mark_command(now)
+        log.info("Command marked (%s): watching for responses for %.0f s", source, settings.signs.command_window_s)
 
     started = timebase.now()
     run_at = iso_utc(timebase.to_wall(started))
@@ -287,17 +303,21 @@ def run(args: argparse.Namespace) -> int:
                 publisher.submit(reports, now)
                 next_publish = max(next_publish + publish_period, now - publish_period)
 
-            if not args.no_display and frame is not None:
-                key = show(frame.image, tracks, tracker, calibration, zone_map, camera, publisher,
-                           fps, detector, settings, args, mapping_error, signs, now, view)
+            if stream is not None and stream.take_commands():
+                mark_command(now, "dashboard")
+            showing = not args.no_display or (stream is not None and stream.watched)
+            if showing and frame is not None:
+                canvas = draw(frame.image, tracks, tracker, calibration, zone_map, camera, publisher,
+                              fps, detector, settings, args, mapping_error, signs, now, view)
+                if stream is not None:
+                    stream.publish(canvas, now)
+                key = 255 if args.no_display else show(canvas)
                 if key in (ord("q"), 27):
                     break
                 if key == ord("v") and signs is not None:
                     view = "debug" if view == "responder" else "responder"
-                if key == ord("c") and signs is not None:
-                    signs.mark_command(now)
-                    log.info("Command marked: watching for responses for %.0f s",
-                             settings.signs.command_window_s)
+                if key == ord("c"):
+                    mark_command(now, "key c")
                 room = room_for_key(key, zone_map) if pick_room else None
                 if room is not None and room != tracker.current_zone:
                     tracker.set_current_zone(room)
@@ -306,6 +326,8 @@ def run(args: argparse.Namespace) -> int:
         camera.release()
         if publisher is not None:
             publisher.stop()
+        if stream is not None:
+            stream.stop()
         if not args.no_display:
             import cv2
 
@@ -323,11 +345,9 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
-def show(image, tracks, tracker, calibration, zone_map, camera, publisher, fps, detector,
-         settings, args, mapping_error, signs=None, now: float = 0.0, view: str = "debug") -> int:
-    """Draw the window (responder view or debug view); returns the key pressed (or 255)."""
-    import cv2
-
+def draw(image, tracks, tracker, calibration, zone_map, camera, publisher, fps, detector,
+         settings, args, mapping_error, signs=None, now: float = 0.0, view: str = "debug"):
+    """The responder view or the debug view, for the window and the stream."""
     pub = publisher.status() if publisher else None
     warnings = []
     if pub is not None and pub["backing_off"]:
@@ -337,10 +357,15 @@ def show(image, tracks, tracker, calibration, zone_map, camera, publisher, fps, 
     if camera.is_file:
         warnings.append("REPLAY (recorded clip)" + (f" loop {camera.loops}" if args.loop else ""))
     if view == "responder" and signs is not None:
-        canvas = responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs, now, warnings)
-    else:
-        canvas = debug_view(image, tracks, tracker, calibration, zone_map, camera, pub, fps, detector,
-                            settings, args, signs, now, warnings)
+        return responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs, now, warnings)
+    return debug_view(image, tracks, tracker, calibration, zone_map, camera, pub, fps, detector,
+                      settings, args, signs, now, warnings)
+
+
+def show(canvas) -> int:
+    """Show the canvas in the window; returns the key pressed (or 255)."""
+    import cv2
+
     cv2.imshow(WINDOW, canvas)
     fit_window(canvas.shape[1], canvas.shape[0])
     return cv2.waitKey(1) & 0xFF

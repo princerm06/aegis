@@ -209,6 +209,34 @@ looking straight down at someone lying can make posture read upright.
 
 Test a recording: `python -m cv.tools.signs_report --source walk.mp4 --moving-camera`.
 
+### Live demo and the dashboard camera tile
+
+`cv/config/demo.yaml` is `rooms.yaml` for the mounted C922 (2–2.5 m high,
+angled about 45° down, not straight down) with signs on, 1080p capture, and
+unseen tracks kept for 5 minutes instead of 30 s. The backend links each
+casualty to one track and cannot unlink it, so an actor must keep their track
+ID when someone stands in front of them.
+
+```sh
+python -m cv.main --config cv/config/demo.yaml --room room-2 --send-signs --stream-port 8090
+```
+
+`--stream-port` serves the responder view (`cv/stream.py`), so the dashboard
+can show it without screen sharing:
+
+| URL | What |
+| --- | --- |
+| `http://127.0.0.1:8090/stream.mjpg` | MJPEG for an `<img src>` (the dashboard's camera tile) |
+| `http://127.0.0.1:8090/frame.jpg` | The latest frame |
+| `http://127.0.0.1:8090/` | A page with the stream |
+| `POST http://127.0.0.1:8090/command` | "Command given", the same as key **c** |
+
+Frames are drawn and encoded only while someone watches (at most 12 per
+second), and the view is drawn even with `--no-display`. It binds to localhost
+by default because the frames show people; `--stream-host 0.0.0.0` exposes it to
+the network. Measured on a replayed clip: about 9 frames per second to one
+viewer, and the command reached the pipeline.
+
 ## What is published
 
 `POST /api/v1/simulations/demo/cameras/<camera_id>/observations`:
@@ -631,7 +659,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-190 tests. The suite covers:
+192 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.
@@ -670,7 +698,9 @@ python -m pytest cv/tests
   background (a moving person is not camera motion), camera sway not counted
   as movement while a raised hand still counts as a response, a moving camera
   pausing signs, sway at a breathing rate not read as breathing, room keys,
-  and every room point walkable on the demo map.
+  and every room point walkable on the demo map (also for `demo.yaml`).
+- The dashboard stream: nothing encoded while unwatched, a frame and the MJPEG
+  stream served, and commands posted from the dashboard counted once.
 - Contract tests that validate every payload against `backend/app/models.py` and
   `backend/app/simulation/models.py`, and drive the in-process backend through
   full calibrated and zone lifecycles (skipped without `requirements-dev.txt`).
@@ -733,3 +763,7 @@ Nothing here changes a shared file.
   - `confidence` and `position`.
   - `camera.location_basis`: `calibrated_world` with `calibration_ref`, or
     `zone_estimate` with `zone_id`. Show the zone estimate as approximate.
+- **For Hillary, the camera tile:** with `--stream-port 8090`, use
+  `http://127.0.0.1:8090/stream.mjpg` as the tile's `<img src>`. A "command
+  given" button can `POST http://127.0.0.1:8090/command` (no body, CORS open)
+  so the operator does not have to switch to the CV window to press **c**.
