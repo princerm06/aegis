@@ -178,6 +178,11 @@ TAKES = {take.name: take for take in (
          cues=((38, "Person B, wave"),),
          checks=(Check("reaches", "response", "responded", 22, 36), Check("reaches", "response", "no_response", 29),
                  Check("reaches", "waving", "seen", 42), Check("absent", "person_nearby", "seen"))),
+    Take("pulse-check", 45, "Sit or half lie facing the camera, one and a half to two metres away, face in even "
+         "light, no glasses, a smartwatch or pulse oximeter on. Keep still until the end, then read your pulse "
+         "out loud. The rate is compared by hand with that reading (store it with --notes).",
+         checks=(Check("reaches", "pulse", "estimated", 15),),
+         cues=((40, "Read your pulse now"),)),
     Take("one-arm", 55, LIE + "When the voice says move, keep moving only your right arm until the end.",
          cues=((10, "Move your right arm, keep everything else still"),),
          checks=(Check("value", "limbs", "some_not_moved", 40),)),
