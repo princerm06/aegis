@@ -1,9 +1,13 @@
 # Proposal: observed signs on camera observations (`signs`, v0.1)
 
-Status: **proposal**, needs Prince (backend/contract) and Hillary (dashboard)
-review. The CV side is built behind `signs.enabled` (compute and show) and
-`publisher.send_signs` (put them on the wire). Both are off by default because
-the current backend rejects unknown fields (`extra="forbid"`).
+Status: **agreed scope** (Prince, Nov 14): signs are visual observations only.
+The backend stores and exposes them, the dashboard shows them next to the
+casualty's tracking information, and the human-confirmed simulated triage
+priority stays the only priority used for optimization and dispatch. Automatic
+priority recommendations from signs are on hold until there is a defensible,
+validated method. The CV side is built behind `signs.enabled` (compute and
+show) and `publisher.send_signs` (put them on the wire); sending stays off until
+the backend accepts the payload.
 
 ## Why
 
@@ -12,22 +16,18 @@ per-casualty signs (severe hemorrhage, respiratory signs, alertness, trauma
 region) to medics. AEGIS keeps the human in the loop:
 
 ```
-camera ──signs (observations + confidence)──▶ backend ──suggested priority + evidence──▶ dashboard
-                                                                     medic confirms / overrides ──▶ human assessment
+camera ──signs (observations + confidence)──▶ backend (store, expose) ──▶ dashboard
+                                         medic assesses ──▶ human priority ──▶ optimization, dispatch
 ```
 
 1. **CV** reports what it sees, each sign with a confidence and an explicit
    `not_testable`. It never outputs a diagnosis, injury type, severity or
    priority.
-2. **The backend** computes a *suggested* priority from the signs. It is shown
-   as machine-suggested with the evidence it used, and never stored as a
-   `MedicalAssessment`.
-3. **The medic** confirms or overrides it in the dashboard. Only that action
-   creates the `source: "human"` assessment the solver already uses.
-
-This changes the team rule "CV never supplies medical labels" only in the
-direction above: CV supplies evidence, the backend suggests, a human decides.
-It needs the team's agreement before merge.
+2. **The backend** stores the latest signs per track and exposes them with the
+   tracking information. It derives nothing medical from them.
+3. **The medic** sees the signs in the dashboard and records the priority as
+   today (`source: "human"`). Only that priority reaches the solver and the
+   responder device.
 
 ## Wire format
 
@@ -94,27 +94,21 @@ Rules for consumers:
    `CVObservation`, with the models above (frozen enums, confidence 0..1,
    `extra="forbid"`).
 2. **Store without disturbing approvals:** store the latest signs per track
-   without bumping the scene revision on every change. Only a change of a
-   sign's `value` should count as impactful, and only if it changes the
-   suggestion.
-3. **Suggested priority:** compute it per associated casualty from the signs,
-   for example DARPA-style ordering where `visible_blood: detected` on the
-   torso or legs, `breathing: no_motion_detected`, or `response: no_response`
-   with `eyes: closed` push the suggestion up. Return it with the sign values
-   and confidences it used (`evidence`). The rules are Prince's to define.
-4. **Expose the suggestion** in state, events and the explanation API, labeled
-   machine-suggested. Medic confirmation keeps using
-   `POST /casualties/{id}/assessment` with `source: "human"`.
+   without bumping the scene revision on every change; signs never feed the
+   solver.
+3. **Expose** them in state (per track, with `observed_at`), so the dashboard
+   can show each sign's age.
 
 ## Dashboard (Hillary)
 
 Per casualty:
 
-- Each sign with its confidence and age.
-- The suggested priority with its evidence.
-- One-click "confirm" (posts the assessment) or "override".
+- Each sign with its confidence and age, next to the tracking information.
+- The human-confirmed priority as today; signs never set or suggest it.
 
-Show `not_testable` as grey, not as normal.
+Show `not_testable` as grey, not as normal, and never as "fine": a person the
+camera cannot assess is not evidence of anything. `cv/monitor.py` shows one
+layout (rows: blood, breathing, response, eyes, movement).
 
 ## Not proposed
 
@@ -122,3 +116,4 @@ Show `not_testable` as grey, not as normal.
   webcam at 2–3 m cannot measure it reliably.
 - **CV output:** no injury type, diagnosis, severity or priority comes from
   CV.
+- **Automatic priority suggestions** from signs: on hold until validated.

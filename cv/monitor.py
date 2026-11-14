@@ -51,7 +51,7 @@ REGION_NAMES = {"head": "head", "torso": "torso", "left_arm": "L arm", "right_ar
                 "left_leg": "L leg", "right_leg": "R leg"}
 COMPACT_TEXT = {"BLOOD": "blood seen", "BREATHING": "no chest motion", "RESPONSE": "no response",
                 "EYES": "eyes closed"}
-FOOTER = ("Amber: look at this.  Grey: camera cannot tell.  Bar: detector confidence.",
+FOOTER = ("Amber: notable observation.  Grey: camera cannot tell.  Bar: confidence.",
           "Camera observations, not a diagnosis. The medic decides.")
 
 

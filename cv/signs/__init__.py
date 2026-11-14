@@ -2,8 +2,8 @@
 
 Every sign is an observation with a confidence and an explicit ``not_testable``
 / ``not_tested``. Nothing here is a diagnosis, injury type, severity or
-priority; the backend may turn the signs into a *suggested* priority that a
-medic confirms (see cv/CONTRACT_PROPOSAL.md).
+priority. The backend stores and shows the signs; only the medic-confirmed
+priority is used for dispatch (see cv/CONTRACT_PROPOSAL.md).
 """
 
 from __future__ import annotations

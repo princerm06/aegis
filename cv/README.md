@@ -8,9 +8,9 @@ The CV module reports **observations with confidence** only: where a person is
 on the floor, how sure the detector is, whether the track is currently seen,
 and (with `--signs`) DARPA-style observed signs: posture, movement, response
 to a command, eyes, breathing motion and visible blood. It never outputs
-injury type, diagnosis, severity, triage or heart rate. The backend may turn
-the signs into a *suggested* priority that a medic confirms or overrides in the
-dashboard (`CONTRACT_PROPOSAL.md`). All scenes and casualties are simulated.
+injury type, diagnosis, severity, triage or heart rate. The backend stores
+and shows the signs; only the medic-confirmed priority is used for dispatch
+(`CONTRACT_PROPOSAL.md`). All scenes and casualties are simulated.
 
 ## Status
 
@@ -289,7 +289,7 @@ switches to the debug view with FPS, track states and publisher counters):
 - **Cards:** one per person, same number and color, in ID order so they never
   jump. Rows follow the order responders check: blood, breathing (rate and a
   live chest trace), response, eyes, movement.
-- **Colors:** amber = look at this (blood seen, no chest motion, no response,
+- **Colors:** amber = notable observation (blood seen, no chest motion, no response,
   eyes closed); teal dot = observed; grey = the camera cannot tell, with what
   is needed ("camera must be still", "face not visible", "press C after a
   command", "measuring, 6 s"); cyan = listening after a command, with the time
