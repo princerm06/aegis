@@ -337,3 +337,22 @@ def test_a_changed_sign_value_is_sent_before_the_heartbeat():
     assert publisher.submit([replace(report(100.2), signs=timer_only)]) == 0
     opened = {**SIGNS, "eyes": {"value": "open", "confidence": 0.7}}
     assert publisher.submit([replace(report(100.2), signs=opened)]) == 1
+
+
+def test_an_unreachable_eye_model_download_disables_eyes_instead_of_hanging(tmp_path, monkeypatch):
+    import urllib.request
+
+    from cv.signs.eyes import FaceScorer
+
+    calls = []
+
+    def offline(url, timeout=None):
+        calls.append(timeout)
+        raise TimeoutError("no internet on this hotspot")
+
+    monkeypatch.setattr(urllib.request, "urlopen", offline)
+    scorer = FaceScorer(tmp_path / "face_landmarker.task")
+    assert scorer.prepare() is False and not scorer.available
+    assert calls and calls[0] is not None                  # the download always has a timeout
+    assert scorer.closed_score(np.zeros((64, 64, 3), np.uint8)) is None
+    assert len(calls) == 1                                 # and is not retried on every frame

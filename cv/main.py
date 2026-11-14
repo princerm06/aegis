@@ -172,6 +172,7 @@ def run(args: argparse.Namespace) -> int:
         from cv.signs import SignsEstimator
 
         signs = SignsEstimator(settings.signs, timebase.iso, settings.tracking.keypoint_min_conf)
+        signs.prepare()
         log.info("Observing signs%s; press c in the window right after giving a spoken command",
                  " and sending them" if settings.publisher.send_signs else " (shown only, not sent)")
 

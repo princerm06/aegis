@@ -133,6 +133,7 @@ def run(args: argparse.Namespace) -> dict:
     tracker = TrackManager(settings.tracking, "clip")
     timebase = Timebase(monotonic=lambda: 0.0, wall=lambda: datetime(2000, 1, 1, tzinfo=timezone.utc))
     signs = SignsEstimator(settings.signs, timebase.iso, settings.tracking.keypoint_min_conf)
+    signs.prepare()
     writer, layout = None, CalloutLayout()
     commands = sorted(args.command_at)
     samples: dict[str, list[tuple[float, dict]]] = {}

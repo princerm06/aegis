@@ -45,6 +45,11 @@ class SignsEstimator:
         self.states: dict[str, _TrackSigns] = {}
         self.command_t: float | None = None
 
+    def prepare(self) -> None:
+        """Load the eye model before the first frame, so a download never stalls the live loop."""
+        if self.settings.eyes:
+            self.eyes.scorer.prepare()
+
     @property
     def camera_motion(self) -> str:
         """``fixed`` unless signs.moving_camera; else still / steady / moving / unknown."""
