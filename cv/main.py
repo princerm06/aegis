@@ -344,9 +344,15 @@ def fit_window(width: int, height: int, max_width: int = 1400) -> None:
         cv2.resizeWindow(WINDOW, int(width * scale), int(height * scale))
 
 
-def responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs, now, warnings):
-    from cv.monitor import build_cards, render
+_layout = None
 
+
+def responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs, now, warnings):
+    from cv.monitor import CalloutLayout, build_scene, render
+
+    global _layout
+    if _layout is None:
+        _layout = CalloutLayout()
     status = [settings.publisher.camera_id]
     keys = "C command given | V debug view | Q quit"
     if tracker.current_zone is not None:
@@ -359,8 +365,8 @@ def responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs,
     else:
         status.append("MOCK" if args.mock_backend else
                       ("backend offline" if pub["backing_off"] else "backend OK"))
-    cards, hidden = build_cards(tracks, signs, now)
-    return render(image, tracks, cards, status, warnings, keys, settings.tracking.keypoint_min_conf, hidden)
+    return render(image, tracks, build_scene(tracks, signs, now), _layout, status, warnings, keys,
+                  settings.tracking.keypoint_min_conf)
 
 
 def debug_view(image, tracks, tracker, calibration, zone_map, camera, pub, fps, detector,

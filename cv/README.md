@@ -284,18 +284,27 @@ Each sign is an observation with a confidence and an explicit
 **Responder view** (`cv/monitor.py`, the default window with signs; **v**
 switches to the debug view with FPS, track states and publisher counters):
 
-- **Video:** each person has a numbered tag and corner marks in their own
-  color. Body regions where blood is seen are outlined in amber.
-- **Cards:** one per person, same number and color, in ID order so they never
-  jump. Rows follow the order responders check: blood, breathing (rate and a
-  live chest trace), response, eyes, movement.
-- **Colors:** amber = notable observation (blood seen, no chest motion, no response,
-  eyes closed); teal dot = observed; grey = the camera cannot tell, with what
-  is needed ("camera must be still", "face not visible", "press C after a
-  command", "measuring, 6 s"); cyan = listening after a command, with the time
-  left. The bar is the detector confidence.
-- **Crowds:** more than 4 people switch to one-line cards listing only the
-  flagged findings. People out of view for over 5 s are counted, not shown.
+- **A box beside each person.** It is tied to the person's chest by a line
+  and follows them. There is no side panel: the reading sits next to the body
+  it belongs to. The number and color match the dashboard track.
+- **Top line:** number, posture, and how long the person has been still.
+- **Eye row:** an open, closed or crossed-out eye with `EYES OPEN / CLOSED /
+  NOT VISIBLE`, and the response to a spoken command under it.
+- **Drop row:** `NO VISIBLE BLOOD` or `BLOOD: HEAD, L ARM`. The body regions
+  are outlined in amber on the person.
+- **Lungs row:** breaths per minute with a live chest trace, or why there is
+  no number yet (`MEASURING 6 s`, `CAMERA MUST BE STILL`, `PERSON MUST BE
+  STILL`, `CHEST NOT VISIBLE`).
+- **Colors:** white = observed; amber = notable observation (blood seen, no
+  chest motion, no response, eyes closed); grey = the camera cannot tell, with
+  the reason; cyan = listening after a command, with the time left. A trailing
+  `?` marks a low-confidence value.
+- **Placement:** a box goes to the side of its person where it covers no other
+  box and no face, and moves smoothly. Boxes shrink for more than 2 and more
+  than 4 people. People out of view keep a dimmed box for 5 s and are then
+  counted in the top bar.
+
+Text and icons are drawn with Pillow (`pillow` in `requirements.txt`).
 
 Colors mark observations, never severity, and there is no heart rate: the
 brief excludes camera-based heart rate and a webcam at 2–3 m cannot measure it.
@@ -471,7 +480,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-153 tests. The suite covers:
+157 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.
@@ -491,8 +500,10 @@ python -m pytest cv/tests
   level face crops for sideways faces, signs sent only on visible reports.
 - Fake casualties: the scripted timeline, and the whole scene accepted by the
   in-process backend.
-- Responder view: row order, amber findings, grey reasons, listening
-  countdown, no clinical words or heart rate, any frame size and crowd size.
+- Responder view: amber findings, grey reasons, listening countdown, no
+  clinical words or heart rate, any frame size and crowd size; boxes stay in
+  the frame beside their person, off faces and off each other, and follow
+  smoothly.
 - Rooms and bodycam: camera still / steady / moving / unknown from the
   background (a moving person is not camera motion), camera sway not counted
   as movement while a raised hand still counts as a response, a moving camera

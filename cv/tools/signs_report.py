@@ -111,7 +111,7 @@ def run(args: argparse.Namespace) -> dict:
 
     from cv.clock import Timebase
     from cv.detector import Detector
-    from cv.monitor import build_cards, render
+    from cv.monitor import CalloutLayout, build_scene, render
     from cv.signs import SignsEstimator
     from cv.tracker import TrackManager
 
@@ -133,7 +133,7 @@ def run(args: argparse.Namespace) -> dict:
     tracker = TrackManager(settings.tracking, "clip")
     timebase = Timebase(monotonic=lambda: 0.0, wall=lambda: datetime(2000, 1, 1, tzinfo=timezone.utc))
     signs = SignsEstimator(settings.signs, timebase.iso, settings.tracking.keypoint_min_conf)
-    writer = None
+    writer, layout = None, CalloutLayout()
     commands = sorted(args.command_at)
     samples: dict[str, list[tuple[float, dict]]] = {}
     seen_s: Counter = Counter()
@@ -160,8 +160,7 @@ def run(args: argparse.Namespace) -> dict:
                 next_sample[track.track_id] = t + args.step
                 samples.setdefault(track.track_id, []).append((t, signs.snapshot(track, t)))
         if args.save_video:
-            cards, hidden = build_cards(tracks, signs, t)
-            canvas = render(image, tracks, cards, [f"t = {t:5.1f} s"], hidden=hidden,
+            canvas = render(image, tracks, build_scene(tracks, signs, t), layout, [f"t = {t:.1f} s"],
                             keypoint_min_conf=settings.tracking.keypoint_min_conf)
             if writer is None:
                 writer = cv2.VideoWriter(args.save_video, cv2.VideoWriter_fourcc(*"mp4v"), fps,

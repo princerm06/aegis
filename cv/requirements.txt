@@ -8,4 +8,5 @@ PyYAML>=6
 requests>=2.31
 lap>=0.5.12
 mediapipe>=0.10.14   # eye open/closed (Face Landmarker blendshapes)
+pillow>=10           # responder view text and icons
 pytest>=8
