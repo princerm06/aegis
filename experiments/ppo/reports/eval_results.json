@@ -1,0 +1,437 @@
+{
+  "generated_at": "2026-11-14T04:47:30.300798+00:00",
+  "eval_seeds": [
+    901,
+    902,
+    903,
+    904
+  ],
+  "weights": [
+    "ppo_allocation_train101.zip",
+    "ppo_allocation_train102.zip"
+  ],
+  "rows": [
+    {
+      "solver": "ortools",
+      "engine": "ortools",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 18.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        },
+        {
+          "casualty_id": "c3",
+          "responder_id": "r1"
+        }
+      ],
+      "solver_runtime_ms": 21237.815375003265,
+      "wall_runtime_ms": 21237.836374988547,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 901
+    },
+    {
+      "solver": "nearest",
+      "engine": "nearest",
+      "assigned_count": 2,
+      "allocation_priority_points": 2.0,
+      "travel_distance_m": 6.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c3"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r1"
+        },
+        {
+          "casualty_id": "c2",
+          "responder_id": "r0"
+        }
+      ],
+      "solver_runtime_ms": 0.5117920227348804,
+      "wall_runtime_ms": 0.523083028383553,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 901
+    },
+    {
+      "solver": "ppo",
+      "engine": "ppo-sequential",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 18.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c3",
+          "responder_id": "r1"
+        },
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        }
+      ],
+      "wall_runtime_ms": 0.44270799844525754,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 901,
+      "weights": "ppo_allocation_train101.zip"
+    },
+    {
+      "solver": "ppo",
+      "engine": "ppo-sequential",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 18.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        },
+        {
+          "casualty_id": "c3",
+          "responder_id": "r1"
+        }
+      ],
+      "wall_runtime_ms": 0.20950002362951636,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 901,
+      "weights": "ppo_allocation_train102.zip"
+    },
+    {
+      "solver": "ortools",
+      "engine": "ortools",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 4.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r1"
+        },
+        {
+          "casualty_id": "c3",
+          "responder_id": "r0"
+        }
+      ],
+      "solver_runtime_ms": 1.227708999067545,
+      "wall_runtime_ms": 1.240084005985409,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 902
+    },
+    {
+      "solver": "nearest",
+      "engine": "nearest",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 4.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r1"
+        },
+        {
+          "casualty_id": "c3",
+          "responder_id": "r0"
+        }
+      ],
+      "solver_runtime_ms": 0.17783298972062767,
+      "wall_runtime_ms": 0.18437497783452272,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 902
+    },
+    {
+      "solver": "ppo",
+      "engine": "ppo-sequential",
+      "assigned_count": 0,
+      "allocation_priority_points": 0.0,
+      "travel_distance_m": 0.0,
+      "unassigned_casualty_ids": [
+        "c0",
+        "c1",
+        "c2",
+        "c3"
+      ],
+      "unassigned_count": 4,
+      "assignments": [],
+      "wall_runtime_ms": 0.7805830100551248,
+      "committed_violations": 0,
+      "invalid_attempts": 13,
+      "eval_seed": 902,
+      "weights": "ppo_allocation_train101.zip"
+    },
+    {
+      "solver": "ppo",
+      "engine": "ppo-sequential",
+      "assigned_count": 1,
+      "allocation_priority_points": 2.0,
+      "travel_distance_m": 5.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2",
+        "c3"
+      ],
+      "unassigned_count": 3,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        }
+      ],
+      "wall_runtime_ms": 0.7172909972723573,
+      "committed_violations": 0,
+      "invalid_attempts": 12,
+      "eval_seed": 902,
+      "weights": "ppo_allocation_train102.zip"
+    },
+    {
+      "solver": "ortools",
+      "engine": "ortools",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 9.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        },
+        {
+          "casualty_id": "c3",
+          "responder_id": "r1"
+        }
+      ],
+      "solver_runtime_ms": 1.4640000008512288,
+      "wall_runtime_ms": 1.4762089995201677,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 903
+    },
+    {
+      "solver": "nearest",
+      "engine": "nearest",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 9.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        },
+        {
+          "casualty_id": "c3",
+          "responder_id": "r1"
+        }
+      ],
+      "solver_runtime_ms": 0.3180839994456619,
+      "wall_runtime_ms": 0.3262920072302222,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 903
+    },
+    {
+      "solver": "ppo",
+      "engine": "ppo-sequential",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 9.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c3",
+          "responder_id": "r1"
+        },
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        }
+      ],
+      "wall_runtime_ms": 0.17312500858679414,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 903,
+      "weights": "ppo_allocation_train101.zip"
+    },
+    {
+      "solver": "ppo",
+      "engine": "ppo-sequential",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 9.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        },
+        {
+          "casualty_id": "c3",
+          "responder_id": "r1"
+        }
+      ],
+      "wall_runtime_ms": 0.14341698260977864,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 903,
+      "weights": "ppo_allocation_train102.zip"
+    },
+    {
+      "solver": "ortools",
+      "engine": "ortools",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 16.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        },
+        {
+          "casualty_id": "c3",
+          "responder_id": "r1"
+        }
+      ],
+      "solver_runtime_ms": 1.3749579957220703,
+      "wall_runtime_ms": 1.386958989314735,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 904
+    },
+    {
+      "solver": "nearest",
+      "engine": "nearest",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 16.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        },
+        {
+          "casualty_id": "c3",
+          "responder_id": "r1"
+        }
+      ],
+      "solver_runtime_ms": 0.3681669768411666,
+      "wall_runtime_ms": 0.3767089801840484,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 904
+    },
+    {
+      "solver": "ppo",
+      "engine": "ppo-sequential",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 16.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c3",
+          "responder_id": "r1"
+        },
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        }
+      ],
+      "wall_runtime_ms": 0.1576670038048178,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 904,
+      "weights": "ppo_allocation_train101.zip"
+    },
+    {
+      "solver": "ppo",
+      "engine": "ppo-sequential",
+      "assigned_count": 2,
+      "allocation_priority_points": 4.0,
+      "travel_distance_m": 16.0,
+      "unassigned_casualty_ids": [
+        "c1",
+        "c2"
+      ],
+      "unassigned_count": 2,
+      "assignments": [
+        {
+          "casualty_id": "c0",
+          "responder_id": "r0"
+        },
+        {
+          "casualty_id": "c3",
+          "responder_id": "r1"
+        }
+      ],
+      "wall_runtime_ms": 0.15262499800883234,
+      "committed_violations": 0,
+      "invalid_attempts": 0,
+      "eval_seed": 904,
+      "weights": "ppo_allocation_train102.zip"
+    }
+  ]
+}

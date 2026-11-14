@@ -1,0 +1,17 @@
+eval_seed,contender,assigned,points,travel_m,unassigned,runtime_ms,violations,invalid_attempts
+901,ortools,2,4.0,18.000,2,21237.84,0,0
+901,nearest,2,2.0,6.000,2,0.52,0,0
+901,ppo[ppo_allocation_train101.zip],2,4.0,18.000,2,0.44,0,0
+901,ppo[ppo_allocation_train102.zip],2,4.0,18.000,2,0.21,0,0
+902,ortools,2,4.0,4.000,2,1.24,0,0
+902,nearest,2,4.0,4.000,2,0.18,0,0
+902,ppo[ppo_allocation_train101.zip],0,0.0,0.000,4,0.78,0,13
+902,ppo[ppo_allocation_train102.zip],1,2.0,5.000,3,0.72,0,12
+903,ortools,2,4.0,9.000,2,1.48,0,0
+903,nearest,2,4.0,9.000,2,0.33,0,0
+903,ppo[ppo_allocation_train101.zip],2,4.0,9.000,2,0.17,0,0
+903,ppo[ppo_allocation_train102.zip],2,4.0,9.000,2,0.14,0,0
+904,ortools,2,4.0,16.000,2,1.39,0,0
+904,nearest,2,4.0,16.000,2,0.38,0,0
+904,ppo[ppo_allocation_train101.zip],2,4.0,16.000,2,0.16,0,0
+904,ppo[ppo_allocation_train102.zip],2,4.0,16.000,2,0.15,0,0
