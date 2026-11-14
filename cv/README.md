@@ -400,9 +400,9 @@ assigns the triage tag; CV never does.
 | walking | Standing in at least 80% of 4 s and moving at least 0.8 body heights across the floor | Feet in view |
 | limbs | For each arm and leg, whether it moved relative to the body in the last 30 s; `some_not_moved` lists the ones that did not | Limbs visible for 15 s |
 | blood_spread | Red area relative to body size, now vs 30 s ago: `growing` at 1.3× or more, `shrinking` below 1/1.3 | Blood detected; same light |
-| waving | A hand above the shoulder (along the torso) swinging back and forth at least 3 times in 3 s; lying: an arm held out and swinging. A walking arm swing (hand low) or a hand held up still is not waving | Shoulder and wrist visible for 3 s |
+| waving | A hand above the shoulder (along the torso) changing direction at least 4 times in 3 s; lying: an arm held out and swinging. A walking arm swing (hand low) or a hand held up still is not waving. A 4 s window would catch calmer waves but also a sleeping woman adjusting her pillow | Shoulder and wrist visible for 3 s |
 | face_down | Lying, both shoulders and a hip seen, shoulders wide (at least 0.45 of the torso length), the head inside the picture, and no nose or eyes for 3 s. On the side with the back to the camera: `not_testable` | Whole torso in view |
-| person_nearby | Someone lying or sitting has another person who is not lying within 1.5 m on the floor (uncalibrated: feet within 0.6 body sizes of their box) for 2 s | Both people detected |
+| person_nearby | Someone lying or sitting has another person who is not lying within 1.5 m on the floor (uncalibrated: feet within 0.6 body sizes of their box) for 2 s. A person whose box covers at least 30% of theirs counts in any posture (a helper bent over someone reads as lying from above), and once next to them, a helper hidden on top of them still counts | Both people detected at least once |
 | changes | The last 5 changes of posture, movement, response, eyes, breathing or blood, each held for 3 s | — |
 
 A moving camera pauses fall, walking and limbs (`not_testable`,
@@ -454,7 +454,8 @@ Results (Nov 14):
 | UR Fall, 10 falls (320×240 Kinect) | 9 of 10 end as `lying`. `fall: seen` in 10 of 10 since the image re-attach scales with the person's box (8 of 10 before: in two clips the detector started a new ID mid-fall). No waving on any of them once the hand must be watched for most of 3 s (arms flung up in a fall read as waving before) |
 | Stock clips of people lying, sleeping, car crash (6) | No false `fall`, `waving`, `face_down` or `person_nearby`. Before two fixes: the three people lying side by side read as "someone next to them" (two had posture `unknown` from overhead; now only standing or sitting people count), and a sleeping woman adjusting her pillow read as waving (now at least 5 swings of 0.2 body sizes in 3 s) |
 | MPSC lying and seated clips (13 people) | No false `fall`, `face_down` or `person_nearby`. Two still, breathing people read as waving from single-frame keypoint jumps; a hand now has to move no faster than 5 body sizes a second, and the window restarts after a jump |
-| Waving, face down, person nearby (positive cases) | Not on public video yet: unit-tested only. Record the `wave`, `face-down` and `helper-kneels` takes |
+| Waving, face down, person nearby (positive cases) | Not on public video; our high-camera takes (Nov 14) below |
+| Our takes, C922 high (demo config) | `demo-two`: response yes and no, waving and no false "someone next to them" all correct. Waving was missed before: the wave was a bit over one sweep a second (5 reversals in 3 s were needed, now 4). Allowing the blurred wrist's one-frame flicks (0.2 body sizes) as well brought back false waving on three still people in MPSC-RespView, so a jump still restarts the window. `helper-kneels`: seen from 22 s; before, never: once the helper knelt, the detector saw one person and gave that box to the person lying down. `walk-past`: not seen, correct. Eyes: open eyes from above scored about 0.45 and closed 0.75, so the demo config uses 0.6; lying 3 m away the eyes are 8–17 px apart and score 0.35–0.7 either way, so the demo config reads only faces with about 22 px between the eyes. Pulse at rest, looking down at the wrist: no reading (moving, then no clear rhythm) |
 | Pexels sleeping man, side profile | Eyes `closed` 88% of testable samples. Before the turned-head fix, 0%: the hidden eye's score dragged the mean to "open" |
 | Pexels three men lying, overhead | Eyes follow the clip: closed 0–6 s, open about 7–15 s, closing again |
 | Mixkit car-crash head wound | Blood `detected` on the head 55% of samples (the wound is out of view in most of the rest). Before the head threshold (2%), 0% |
@@ -671,7 +672,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-202 tests. The suite covers:
+207 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.

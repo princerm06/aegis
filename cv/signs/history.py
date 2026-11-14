@@ -44,7 +44,6 @@ LIMB_MAX_CONFIDENCE = 0.6     # keypoint jitter on limbs is high
 WAVE_MIN_HALF_PERIOD_S = 0.15  # waving is at most about 3 back-and-forths a second
 WAVE_MAX_SPEED = 5.0          # body sizes per second; a waving hand peaks around 2.5
 
-
 @dataclass
 class _Point:
     t: float

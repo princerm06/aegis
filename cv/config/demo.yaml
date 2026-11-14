@@ -40,6 +40,13 @@ tracking:
 
 signs:
   enabled: true
+  # Seen from above, open eyelids look half closed: in the high-camera demo-two
+  # take open eyes scored about 0.45 and closed eyes about 0.75 (0.4 is tuned on
+  # frontal faces, where closed eyes score 0.7-0.9).
+  eyes_closed_threshold: 0.6
+  # Lying 3 m away the eyes are 8-17 px apart and score 0.35-0.7 open or closed,
+  # so read faces only from about 22 px between the eyes (half lying at 2-3 m: 25-35 px).
+  eyes_min_face_px: 72
 
 publisher:
   camera_id: room-cam-1

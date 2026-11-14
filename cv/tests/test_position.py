@@ -67,3 +67,41 @@ def test_someone_standing_or_kneeling_next_to_a_person_down_is_seen_after_two_se
     other_casualty = person("s1-t4", "lying", (410, 300, 640, 380), ground=(520, 380))
     assert nearby_after([other_casualty])["value"] == "not_seen"                      # two people down
     assert nearby_after([helper], posture="standing")["value"] == "not_testable"     # only for people down
+
+
+def test_a_helper_bent_over_a_person_counts_in_any_posture_but_a_second_box_on_them_does_not():
+    bent_over = person("s1-t2", "lying", (250, 220, 420, 400))      # reads lying from above, covers half
+    assert nearby_after([bent_over])["value"] == "seen"
+    same_person_twice = person("s1-t5", "lying", (105, 282, 398, 378))
+    assert nearby_after([same_person_twice])["value"] == "not_seen"
+
+
+def test_a_helper_hidden_on_top_of_the_person_is_still_there_but_one_who_left_is_not():
+    estimator = PositionEstimator(SETTINGS)
+    keypoints, conf = lying()
+
+    def run(helper_after):
+        states = {"s1-t1": PositionState(), "s1-t2": PositionState()}
+        down = person("s1-t1", "lying", (100, 280, 400, 380), keypoints, conf)
+        for t in np.arange(0, 5.0, 0.1):
+            helper = person("s1-t2", "standing", (410, 140, 470, 380), ground=(440, 380)) if t < 1.0 else helper_after
+            estimator.update_nearby(states, [down, helper], t)
+        return estimator.person_nearby(states["s1-t1"], 5.0)["value"]
+
+    kneeling_hidden = person("s1-t2", "unknown", (300, 260, 420, 390))
+    kneeling_hidden.detected = False
+    assert run(kneeling_hidden) == "seen"
+    left_the_picture = person("s1-t2", "standing", (580, 140, 640, 380), ground=(610, 380))
+    left_the_picture.detected = False
+    assert run(left_the_picture) == "not_seen"
+
+
+def test_a_person_half_hidden_by_the_helper_keeps_their_posture():
+    estimator = PositionEstimator(SETTINGS)
+    keypoints, conf = lying()
+    states = {"s1-t1": PositionState(), "s1-t2": PositionState()}
+    helper = person("s1-t2", "lying", (250, 220, 420, 400))
+    for t in np.arange(0, 3.0, 0.1):
+        posture = "lying" if t < 0.5 else "unknown"
+        estimator.update_nearby(states, [person("s1-t1", posture, (100, 280, 400, 380), keypoints, conf), helper], t)
+    assert estimator.person_nearby(states["s1-t1"], 3.0)["value"] == "seen"

@@ -8,8 +8,13 @@
 - ``person_nearby``: someone lying or sitting has another person who is not
   lying (standing, sitting, kneeling) within ``nearby_radius_m`` on the floor,
   or, without floor calibration, within ``nearby_body_frac`` body sizes of
-  their box, for at least ``nearby_hold_s``. Useful to see that someone is
-  already with a person. It says nothing about who that is.
+  their box, for at least ``nearby_hold_s``. Someone whose box covers a good
+  part of theirs also counts, in any posture: a helper bent over a person
+  reads as lying or unknown from above, and hides them. Once someone was next
+  to them, they count as still there while their own track is hidden (the
+  detector often sees one person where a helper kneels over another), until
+  they are seen again away from the person. Useful to see that
+  someone is already with a person. It says nothing about who that is.
 
 Observations only, never a cause, an injury or a priority.
 """
@@ -29,6 +34,8 @@ UPRIGHT = ("standing", "sitting")   # "unknown" is often a person lying seen fro
 FACE_POINTS = (NOSE, L_EYE, R_EYE)
 FACE_DOWN_MAX_CONFIDENCE = 0.6
 NEARBY_GAP_S = 1.0            # a helper missed by the detector this briefly is still there
+NEARBY_COVER = 0.3            # of the smaller box; people lying side by side, even close, overlap less
+NEARBY_SAME_BOX = 0.7         # overlap / union: a second box on the same person, not a helper
 
 
 @dataclass
@@ -37,6 +44,7 @@ class PositionState:
     face_down_since: float | None = None
     near_since: float | None = None
     near_last_t: float | None = None
+    near_with: str | None = None                 # track ID of the person last seen next to them
     down: bool = False
 
 
@@ -89,21 +97,28 @@ class PositionEstimator:
         """All people in view at once: who has someone next to them."""
         settings = self.settings
         seen = [track for track in tracks if track.detected]
+        hidden = {track.track_id: track for track in tracks if not track.detected}
         for track in seen:
             state = states.get(track.track_id)
             if state is None:
                 continue
-            state.down = track.posture.label in DOWN
+            if track.posture.label != "unknown":      # half hidden by a helper: keep the last posture
+                state.down = track.posture.label in DOWN
             if not state.down:
-                state.near_since = state.near_last_t = None
+                state.near_since = state.near_last_t = state.near_with = None
                 continue
-            if any(self._near(track, other) for other in seen
-                   if other is not track and other.posture.label in UPRIGHT):
+            helper = next((other for other in seen if other is not track and (
+                (other.posture.label in UPRIGHT and self._near(track, other)) or self._covers(track, other))), None)
+            gone = hidden.get(state.near_with)               # was next to them, now hidden on top of them
+            hidden_here = gone is not None and (self._near(track, gone) or self._covers(track, gone))
+            if helper is not None or hidden_here:
                 if state.near_last_t is None or t - state.near_last_t > NEARBY_GAP_S:
                     state.near_since = t
                 state.near_last_t = t
+                if helper is not None:
+                    state.near_with = helper.track_id
             elif state.near_last_t is not None and t - state.near_last_t > NEARBY_GAP_S:
-                state.near_since = state.near_last_t = None
+                state.near_since = state.near_last_t = state.near_with = None
 
     def _near(self, person, other) -> bool:
         settings = self.settings
@@ -116,6 +131,16 @@ class PositionEstimator:
         gap = math.hypot(max(x1 - foot[0], 0, foot[0] - x2), max(y1 - foot[1], 0, foot[1] - y2))
         scale = body_scale(person.bbox, person.keypoints, person.keypoint_conf, self.min_conf)
         return gap <= settings.nearby_body_frac * scale
+
+    @staticmethod
+    def _covers(person, other) -> bool:
+        x1, y1, x2, y2 = person.bbox
+        ox1, oy1, ox2, oy2 = other.bbox
+        overlap = max(0.0, min(x2, ox2) - max(x1, ox1)) * max(0.0, min(y2, oy2) - max(y1, oy1))
+        area, other_area = (x2 - x1) * (y2 - y1), (ox2 - ox1) * (oy2 - oy1)
+        smaller, union = min(area, other_area), area + other_area - overlap
+        return (smaller > 0 and overlap >= NEARBY_COVER * smaller
+                and overlap < NEARBY_SAME_BOX * union)
 
     # ------------------------------------------------------------------ values
     def face_down(self, state: PositionState, t: float) -> dict:

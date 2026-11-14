@@ -119,9 +119,9 @@ class SignsSettings:
     limb_move_threshold: float = 0.12   # hand or foot displacement / body size, relative to the torso
     change_hold_s: float = 3.0          # a new value must hold this long to count as a change
     change_keep_s: float = 300.0
-    waving_window_s: float = 3.0
+    waving_window_s: float = 3.0        # 4 s caught a sleeping woman adjusting her pillow (stock clip)
     waving_min_swing: float = 0.2       # hand travel / body size between direction reversals
-    waving_min_reversals: int = 5       # within the window: about 1 back-and-forth a second or faster
+    waving_min_reversals: int = 4       # within the window: a calm wave is a bit over one sweep a second
     waving_arm_out: float = 0.2         # lying: hand this far from the shoulder / body size
     face_down_hold_s: float = 3.0
     face_down_shoulder_ratio: float = 0.45   # shoulder width / torso length; narrower = on the side

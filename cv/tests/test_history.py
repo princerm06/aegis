@@ -108,6 +108,18 @@ def test_waving_is_a_raised_hand_swinging_and_not_a_walking_arm_or_a_held_up_han
     assert estimator.waving(state, 1.0, iso)["value"] == "not_testable"
 
 
+def test_a_calm_wave_is_still_waving():
+    """Measured on the demo-two take: a bit over one sweep a second."""
+    def arm(t):
+        keypoints = KEYPOINTS.copy()
+        keypoints[R_ELBOW] = (265, 105)
+        keypoints[R_WRIST] = (250 + 70 * np.sin(2 * np.pi * 0.7 * t), 60)
+        return keypoints
+
+    estimator, state = run([(t, arm(t), "standing", None) for t in np.arange(0, 8, 1 / 30)])
+    assert estimator.waving(state, 8.0, iso)["value"] == "seen"
+
+
 def test_a_change_counts_once_it_held_and_flicker_does_not():
     estimator, state = HistoryEstimator(SETTINGS), HistoryState()
     timeline = [(t, "open") for t in np.arange(0, 10, 0.5)] + [(t, "closed") for t in np.arange(10, 12, 0.5)]
