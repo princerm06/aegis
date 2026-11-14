@@ -21,6 +21,6 @@ dev = [
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests", "optimization/tests", "hardware/tests"]
-pythonpath = ["."]
+testpaths = ["backend/tests", "optimization/tests", "hardware/tests", "experiments/neural_assignment/tests"]
+pythonpath = [".", "experiments/neural_assignment/src"]
 addopts = "-ra"

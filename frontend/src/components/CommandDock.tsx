@@ -18,12 +18,13 @@ interface Props {
   onDispatch: (p: SimulationProposal, approvalId: string) => void;
   onReplan: () => void;
   onOpenDetails: () => void;
+  neuralSummary?: React.ReactNode;
 }
 
 const DIFF_COLOR = { new: "text-ok", dropped: "text-danger", reassigned: "text-warn", rerouted: "text-accent" } as const;
 
 /** Human approval gate + task acknowledgements, always visible. */
-export function CommandDock({ state, proposal, diff, pending, now, readOnly, device, onDecide, onDispatch, onReplan, onOpenDetails }: Props) {
+export function CommandDock({ state, proposal, diff, pending, now, readOnly, device, onDecide, onDispatch, onReplan, onOpenDetails, neuralSummary }: Props) {
   const busy = pending !== null || readOnly;
   const approval = proposal?.approval_id ? state.approvals.find((a) => a.id === proposal.approval_id) : undefined;
   const isPending = proposal?.status === "pending_approval";
@@ -46,6 +47,7 @@ export function CommandDock({ state, proposal, diff, pending, now, readOnly, dev
             {secs > 0 ? `${isApproved ? "approval" : "expires"} ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}` : "expired"}
           </span>
         )}
+        {neuralSummary}
         <button onClick={onOpenDetails} className={`text-[10.5px] text-accent hover:underline ${proposal ? "" : "ml-auto"}`}>
           details ›
         </button>
