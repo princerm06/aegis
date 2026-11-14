@@ -20,6 +20,7 @@ Proves:
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -366,6 +367,43 @@ def test_comparison_detects_scene_revision_changes_as_stale_and_refreshes():
 # -----------------------------------------------------------------------------
 # 7. Safe Failure Modes & Feature Flag Tests
 # -----------------------------------------------------------------------------
+
+
+def test_corrupt_or_modified_checkpoint_is_rejected_and_fails_safely(tmp_path):
+    """Verify that modified/corrupted checkpoints are strictly rejected by auditor and fail safely in shadow service."""
+    # 1. Test verification rejection with exact equality
+    corrupt_weights_dir = tmp_path / "weights"
+    corrupt_weights_dir.mkdir()
+    corrupt_mlp = corrupt_weights_dir / "mlp_seed42.pt"
+    corrupt_mlp.write_bytes(b"corrupted_tensor_weight_data_invalid_hash")
+
+    scripts_dir = str(DEFAULT_WEIGHTS_DIR.parent / "scripts")
+    sys_path_added = False
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+        sys_path_added = True
+    try:
+        from provision_checkpoints import verify_checkpoints
+        assert verify_checkpoints(corrupt_weights_dir, target_seeds=[42]) is False
+    finally:
+        if sys_path_added and scripts_dir in sys.path:
+            sys.path.remove(scripts_dir)
+
+    # 2. Test runtime service safety: invalid checkpoint does not crash or produce false predictions
+    service = NeuralShadowService(weights_dir=corrupt_weights_dir)
+    store = SimulationStore(neural_shadow_enabled=True, neural_shadow_service=service)
+    store.reset(DEMO_SCENARIO_ID, ResetRequest())
+    store.replan(DEMO_SCENARIO_ID, ReplanRequest(actor="operator"))
+
+    comp: NeuralComparisonReport = store.neural_comparison(DEMO_SCENARIO_ID)
+    assert comp.available is False
+    assert comp.status == "checkpoints_unavailable"
+    assert comp.authorizes_dispatch is False
+    assert comp.mlp_prediction is None
+    assert comp.gnn_prediction is None
+    snapshot = store.snapshot(DEMO_SCENARIO_ID)
+    assert snapshot.current_proposal_id is not None
+    assert snapshot.proposals[-1].engine == "ortools"
 
 
 def test_missing_weights_fails_safely():

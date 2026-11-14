@@ -41,18 +41,28 @@ The AEGIS Neural Shadow subsystem provides live, non-dispatching advisory infere
 
 ---
 
-## 2. Checkpoint Verification & Provenance
+## 2. Checkpoint Verification, Portability & Provisioning
 
-Checkpoints originate from PR #6 (`experiments/neural_assignment/`) and are cryptographically verified against the published benchmark report:
+Checkpoints originate from PR #6 (`experiments/neural_assignment/`) and are cryptographically verified using full 64-character SHA-256 digests:
 
-| Model Architecture | Training Seed | Checkpoint Filename | SHA-256 Digest (Prefix) | Best Val F1 | Parameter Count |
+| Model Architecture | Training Seed | Checkpoint Filename | Full SHA-256 Digest | Best Val F1 | Parameter Count |
 | :--- | :---: | :--- | :--- | :---: | :---: |
-| `PairwiseAssignmentMLP` | 42 | `mlp_seed42.pt` | `3df9bd6a5f9e...` | 0.7935 | 48,513 |
-| `PairwiseAssignmentMLP` | 43 | `mlp_seed43.pt` | `dbfeede473d8...` | 0.7905 | 48,513 |
-| `PairwiseAssignmentMLP` | 44 | `mlp_seed44.pt` | `1614ad8d5e37...` | 0.7908 | 48,513 |
-| `BipartiteAssignmentGNN` | 42 | `gnn_seed42.pt` | `fb6ba734ded8...` | 0.9265 | 392,359 |
-| `BipartiteAssignmentGNN` | 43 | `gnn_seed43.pt` | `aa0ddad994d5...` | 0.9286 | 392,359 |
-| `BipartiteAssignmentGNN` | 44 | `gnn_seed44.pt` | `ab459dcd37ff...` | 0.9194 | 392,359 |
+| `PairwiseAssignmentMLP` | 42 | `mlp_seed42.pt` | `3df9bd6a5f9ecfba0129e3c5ce2f167dbdd5745280eb817f740f6d2f4e9ca68a` | 0.7935 | 48,513 |
+| `PairwiseAssignmentMLP` | 43 | `mlp_seed43.pt` | `dbfeede473d8bdde0bcc83fd77aeea2fcf198f112365900c02108e9575e71573` | 0.7905 | 48,513 |
+| `PairwiseAssignmentMLP` | 44 | `mlp_seed44.pt` | `1614ad8d5e37ec3e65d828b149b589dd0911a7b70adc00bfd45567033905c064` | 0.7908 | 48,513 |
+| `BipartiteAssignmentGNN` | 42 | `gnn_seed42.pt` | `fb6ba734ded8b388b29e64feb579c692b389102c3e529bb427eb56203044c94b` | 0.9265 | 392,359 |
+| `BipartiteAssignmentGNN` | 43 | `gnn_seed43.pt` | `aa0ddad994d5e3db0db76589ea89d03a2cfd8d0270c35d0bad45c956a3a5cd07` | 0.9286 | 392,359 |
+| `BipartiteAssignmentGNN` | 44 | `gnn_seed44.pt` | `ab459dcd37ff4684f92705fb46a6bc0f4acf4fc69b0678a9918f24bf5ec5e196` | 0.9194 | 392,359 |
+
+### Provisioning on a Fresh Checkout
+Because trained PyTorch binary weights (`.pt`) are Git-ignored (`.gitignore:5:weights/`), a fresh repository checkout requires provisioning checkpoints before enabling neural shadow mode:
+1. **Auditing Existing Checkpoints**: Run `python experiments/neural_assignment/scripts/provision_checkpoints.py` (or `--seeds 42`). The auditor strictly requires exact 64-character SHA-256 match; partial or prefix matches are rejected.
+2. **Local Regeneration / Retraining**: If checkpoints need to be reproduced from scratch, run:
+   ```bash
+   python -m neural_assignment.train --model all --seeds 42 43 44 --output-dir experiments/neural_assignment/weights/
+   ```
+3. **Cross-Platform Hash Reproducibility Note**: PyTorch training sets deterministic seeds and algorithms (`torch.use_deterministic_algorithms(True)`), but floating-point arithmetic across different microarchitectures (e.g. Apple Silicon Accelerate vs x86_64 MKL/BLAS) or PyTorch minor versions can yield minor floating-point serialization variances. On the intended demo machine (macOS Apple Silicon, PyTorch 2.15), the verified seed-42 weights match the exact hashes above.
+4. **Graceful Degradation When Missing**: If checkpoints are missing or corrupt, `NeuralShadowService` immediately returns `status: "checkpoints_unavailable"`, `available: false`, and clear UI warning banners without executing unverified or random weights and without blocking the authoritative OR-Tools solver.
 
 ---
 
