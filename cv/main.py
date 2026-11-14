@@ -39,6 +39,7 @@ from cv.zones import ZoneMap, parse_zones
 
 log = logging.getLogger("cv")
 WINDOW = "AEGIS CV (q / Esc to quit)"
+MEMORY_EVERY_S = 600.0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -222,6 +223,8 @@ def run(args: argparse.Namespace) -> int:
     mapping_error = None
     mapping_ready = False
     checked_size = None
+    memory: list[list[float]] = []      # [minutes, peak MB]: a peak still rising hours in is a leak
+    next_memory = started
 
     try:
         while not stopping:
@@ -264,6 +267,12 @@ def run(args: argparse.Namespace) -> int:
                 tracks = tracker.update([], now)  # time passes: occluded / stale / lost
 
             now = timebase.now()
+            if now >= next_memory:
+                memory.append([round((now - started) / 60.0, 1), peak_memory_mb()])
+                next_memory += MEMORY_EVERY_S
+                if len(memory) > 1:
+                    log.info("Running %.0f min: %d frames, %d tracks alive, %d created, peak memory %.0f MB",
+                             memory[-1][0], frames, len(tracker.tracks), tracker.created_total, memory[-1][1])
             if publisher is not None and mapping_ready and now >= next_publish:
                 reports = tracker.reports(now)
                 if signs is not None:
@@ -299,6 +308,7 @@ def run(args: argparse.Namespace) -> int:
 
     summary = build_summary(run_at, frames, timebase.now() - started, inference_ms, tracker,
                             publisher, camera, settings, detector.device, calibration, zone_map)
+    summary["memory_peak_mb"] = memory + [[round((timebase.now() - started) / 60.0, 1), peak_memory_mb()]]
     print_summary(summary)
     if args.summary_json:
         path = Path(args.summary_json)
@@ -422,6 +432,13 @@ def _percentile(values: list[float], q: float) -> float | None:
     return round(ordered[min(len(ordered) - 1, int(q * len(ordered)))], 1)
 
 
+def peak_memory_mb() -> float:
+    import resource
+
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return round(peak / (1 << 20) if sys.platform == "darwin" else peak / 1024, 1)   # bytes on macOS, KB on Linux
+
+
 def build_summary(run_at, frames, elapsed, inference_ms, tracker, publisher, camera, settings,
                   device, calibration, zone_map) -> dict:
     summary = {
@@ -480,6 +497,9 @@ def print_summary(summary: dict) -> None:
                   f"p95 {summary['latency_ms_p95']} ms, max {summary['latency_ms_max']} ms")
         if summary["last_error"]:
             print(f"last error        : {summary['last_error']}")
+    if summary.get("memory_peak_mb"):
+        (first_min, first), (last_min, last) = summary["memory_peak_mb"][0], summary["memory_peak_mb"][-1]
+        print(f"peak memory       : {last:.0f} MB after {last_min:g} min ({first:.0f} MB at {first_min:g} min)")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

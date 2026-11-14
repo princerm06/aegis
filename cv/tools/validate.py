@@ -17,6 +17,8 @@ longest) and only inside the check's time window:
 - ``rate``: share of samples with a breathing rate within 2/min of the pace.
 - ``no_rate``: share without a breathing rate (breath held: any rate is false).
 - ``value``: share with the expected value, e.g. eyes = closed.
+- ``absent``: share without the value, e.g. no ``no_motion_detected`` on a
+  person who is breathing (a false "no chest motion").
 - ``region``: share with visible blood detected in that body region.
 - ``no_blood``: share without visible blood detected (false alarms).
 - ``reaches``: 1 if the value appears on any track, e.g. posture = lying after
@@ -51,7 +53,7 @@ BENCHMARK = CV_DIR / "eval" / "benchmark.yaml"
 OUT_DIR = CV_DIR / "eval" / "validation"
 RATE_TOLERANCE_BPM = 2.0
 REGRESSION = 0.05
-KINDS = ("rate", "no_rate", "value", "region", "no_blood", "reaches")
+KINDS = ("rate", "no_rate", "value", "absent", "region", "no_blood", "reaches")
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,8 @@ class Check:
             what = f"blood on {self.value}"
         elif self.kind == "no_blood":
             what = "no false blood"
+        elif self.kind == "absent":
+            what = f"{self.sign} never {self.value}"
         else:
             what = f"{self.sign} {'reaches ' if self.kind == 'reaches' else ''}{self.value}"
         if self.start_s == 0 and math.isinf(self.end_s):
@@ -166,8 +170,13 @@ def score(check: Check, samples: Sequence[tuple[float, dict]]) -> dict:
     elif check.kind == "no_rate":
         out.update(score=1 - values.count("motion_detected") / len(window),
                    no_motion_share=round(values.count("no_motion_detected") / len(window), 2))
-    elif check.kind == "value":
-        out.update(score=values.count(check.value) / len(window))
+    elif check.kind in ("value", "absent"):
+        share = values.count(check.value) / len(window)
+        out.update(score=share if check.kind == "value" else 1 - share)
+        rates = sorted(s[sign]["rate_bpm"] for s in window if s.get(sign, {}).get("rate_bpm"))
+        if rates:
+            out.update(rate_median=round(median(rates), 1),
+                       rate_p10_p90=[rates[int(0.1 * (len(rates) - 1))], rates[int(0.9 * (len(rates) - 1))]])
     elif check.kind == "reaches":
         out.update(score=1.0 if check.value in values else 0.0)
     else:

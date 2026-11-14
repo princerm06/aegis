@@ -290,32 +290,27 @@ Each sign is an observation with a confidence and an explicit
 **Responder view** (`cv/monitor.py`, the default window with signs; **v**
 switches to the debug view with FPS, track states and publisher counters):
 
-- **A card beside each person**, tied to the chest by a line and following
-  them, read like a watch face. Top line: number (same as the dashboard),
-  posture, and how long they have been still. Below it, four round gauges,
-  each with a fixed icon and label and one short value:
-  **breathing** (`16 /min` or `NOT SEEN`), **eyes** (`OPEN` / `CLOSED`),
-  **response** to a spoken command (`YES` / `NO`), **blood** (`NOT SEEN` or
-  the region, `HEAD +1`; the region is also outlined in amber on the body).
-- **The ring is the state:** white = observed; amber = notable observation
-  (no chest motion, eyes closed, no response, blood seen); dashed grey with a
-  dash = the camera cannot tell; cyan = in progress (the breathing ring fills
-  while it measures, the response ring drains while it watches after a
-  command). A trailing `?` marks a low confidence. When breathing cannot be
-  measured, one grey line says why ("Hold the camera still to measure
-  breathing", "Chest not visible").
-- **Placement:** a card goes beside its person where it covers no other card
-  and as few faces and bodies as possible; it glides, and jumps rather than
-  crossing another card. Portrait pictures get dark side margins for the
-  cards. Cards shrink for more than 2 and more than 4 people. People out of
-  view keep a dimmed card for 5 s and are then counted in the top bar.
-- **Design sources:** Apple Watch complications (one value per ring, big
-  rounded numbers on black), AFRL BATDOK (icon per vital, a dash when missing),
-  and AR triage studies (ARTTS, ISMAR 2022; smart-glasses triage, JMIR 2019;
-  MXR-CDS Triage, MHSRS): one marker per casualty and as little to read as
-  possible, since every extra item costs responders time.
+- **A box beside each person.** It is tied to the person's chest by a line
+  and follows them. There is no side panel: the reading sits next to the body
+  it belongs to. The number and color match the dashboard track.
+- **Top line:** number, posture, and how long the person has been still.
+- **Eye row:** an open, closed or crossed-out eye with `EYES OPEN / CLOSED /
+  NOT VISIBLE`, and the response to a spoken command under it.
+- **Drop row:** `NO VISIBLE BLOOD` or `BLOOD: HEAD, L ARM`. The body regions
+  are outlined in amber on the person.
+- **Lungs row:** breaths per minute with a live chest trace, or why there is
+  no number yet (`MEASURING 6 s`, `CAMERA MUST BE STILL`, `PERSON MUST BE
+  STILL`, `CHEST NOT VISIBLE`).
+- **Colors:** white = observed; amber = notable observation (blood seen, no
+  chest motion, no response, eyes closed); grey = the camera cannot tell, with
+  the reason; cyan = listening after a command, with the time left. A trailing
+  `?` marks a low-confidence value.
+- **Placement:** a box goes to the side of its person where it covers no other
+  box and no face, and moves smoothly. Boxes shrink for more than 2 and more
+  than 4 people. People out of view keep a dimmed box for 5 s and are then
+  counted in the top bar.
 
-Text and icons are drawn with Pillow (`pillow` in `requirements.txt`), in SF Compact Rounded where macOS has it.
+Text and icons are drawn with Pillow (`pillow` in `requirements.txt`).
 
 Colors mark observations, never severity, and there is no heart rate: the
 brief excludes camera-based heart rate and a webcam at 2–3 m cannot measure it.
@@ -402,6 +397,59 @@ Baseline (Nov 14, public clips only): car-crash head blood 0.56; roses no
 false blood 0.40 (right arm); three men no false blood 1.00; eyes closed 0.93
 / 0.85 / 0.49 (the last one is handheld and side-on); UR Fall reaches lying
 9 of 10.
+
+**Breathing on real people (MPSC datasets).** The benchmark also lists two
+research breathing datasets. Download them into `cv/recordings/datasets/`
+with the commands below (about 4.3 GB):
+- [MPSC-RR](https://huggingface.co/datasets/justchugh/MPSC-RR) (CC BY 4.0, Hasan et al., CHASE 2025): the 5 lying clips.
+- [MPSC-RespView](https://huggingface.co/datasets/shadman-sakib/MPSC-RespView) (CC BY-NC 4.0, Sakib & Roy, WACV 2027; non-commercial use only, no attempts to identify anyone): the 13 lying and 23 outdoor clips.
+
+Neither dataset publishes the belt reference, so these clips test failure
+directions (a false "no chest motion" on a breathing person, a rate while
+the breath is held, detection range), not rate accuracy.
+
+```sh
+cd cv/recordings/datasets && mkdir -p mpsc-rr mpsc-respview
+for s in 1 2 3 5 24; do curl -fL -o mpsc-rr/s${s}_lying.mov \
+  "https://huggingface.co/datasets/justchugh/MPSC-RR/resolve/main/dataset/s${s}_lying.mov"; done
+curl -fsL -o mpsc-respview/metadata.csv https://huggingface.co/datasets/shadman-sakib/MPSC-RespView/resolve/main/metadata.csv
+for f in $(awk -F, 'NR>1 && ($4=="lying" || $2=="outdoor") {print $1}' mpsc-respview/metadata.csv); do
+  mkdir -p "mpsc-respview/$(dirname "$f")"
+  curl -fL -o "mpsc-respview/$f" "https://huggingface.co/datasets/shadman-sakib/MPSC-RespView/resolve/main/$f"; done
+```
+
+Results (Nov 14):
+
+| Clips | Result |
+| --- | --- |
+| RespView lying on the floor, 13 people | Person found and `still`, but a rate in only 0–3% of samples; never a false `no_motion_detected` (1.00) |
+| MPSC-RR lying, close torso crops | No rate. The body is cut off, so keypoints jitter: a still person reads `moving` about a third of the time, and on s24 no person is found |
+| RespView outdoor, seated, 4–13 m | Person found in all 8 clips at 4–5 m, 1 of 4 at 6 m, none at 7–13 m (1080p). A rate in 2 of 9 found clips during normal breathing (28 and 31 /min, unverified, high for rest); never a rate while the breath is held (1.00) |
+
+Why the rate is missing: on these clips the summed torso flow drifts like a
+random walk, and the rhythm check (SNR ≥ 40, same rate in both halves) rarely
+passes. Lowering the SNR threshold does not help: an empty background patch
+of the same size, a negative control, then passes about as often as the chest
+(0.25 and 0.23 at SNR 10), with or without subtracting the background motion,
+and on cameras our meter reads as `still`. So the thresholds stay as they
+are, and the safe behavior holds: grey "cannot tell" rather than a wrong
+number. Any change to the breathing method must improve the paced takes
+(known pace) without adding rates on the background patch, the breath-hold
+windows or these clips.
+
+**Soak test.** For a long run with memory tracking, use a zones config so
+reports are actually sent. The summary includes peak memory every 10 minutes;
+a peak that keeps rising hours in means a leak.
+
+```sh
+caffeinate -is python -m cv.main --config cv/config/rooms.yaml --signs --mock-backend --quiet-mock \
+  --no-display --source cv/recordings/datasets/stock/pexels-three-lying-overhead.mp4 --loop \
+  --duration 21600 --summary-json cv/artifacts/soak-6h.json
+```
+
+The first hour (Nov 14) ran at 25 FPS with the same 3 people throughout
+(their IDs survived every loop of the clip), and peak memory stayed flat at
+690 MB.
 
 ### Fake casualties (no camera needed)
 
@@ -521,7 +569,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-173 tests. The suite covers:
+172 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.

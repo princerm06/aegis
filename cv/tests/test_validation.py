@@ -126,3 +126,11 @@ def test_record_take_saves_the_take_in_the_sidecar_and_scoring_finds_it(tmp_path
     assert spoken[0].startswith("Lie on your back") and spoken[1:4] == ["in", "out", "in"] and spoken[-1] == "Done"
     (clip,) = recorded_takes(tmp_path)
     assert clip.source == output and clip.checks == TAKES["breathe-12"].checks
+
+
+def test_absent_counts_false_findings_and_reports_the_rates_seen():
+    samples = [(t, breathing("motion_detected", 10.0 + t)) for t in range(8)]
+    samples += [(t, breathing("no_motion_detected")) for t in range(8, 10)]
+    absent = score(Check("absent", "breathing", "no_motion_detected"), samples)
+    assert absent["score"] == pytest.approx(0.8) and absent["rate_median"] == 13.5
+    assert absent["rate_p10_p90"] == [10.0, 16.0]
