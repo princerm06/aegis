@@ -37,15 +37,16 @@ def values(card):
 
 def test_findings_are_amber_and_each_gauge_has_one_short_value():
     card = card_for(FINDINGS)
-    assert values(card) == ["STILL 1:35", "NO MOTION?", "CLOSED", "NO", "TORSO +1"]   # 0.45 breathing gets "?"
-    assert [g.label for g in card.gauges] == ["BREATHING", "EYES", "RESPONSE", "BLOOD"]
-    assert {g.state for g in card.gauges} == {"attention"} and card.movement.state == "observed"
+    assert values(card) == ["STILL 1:35", "NO MOTION?", UNKNOWN_VALUE, "CLOSED", "NO", "TORSO +1"]   # 0.45 gets "?"
+    assert [g.label for g in card.gauges] == ["BREATHING", "PULSE EST.", "EYES", "RESPONSE", "BLOOD"]
+    assert {g.state for g in card.gauges if g is not card.pulse} == {"attention"}
+    assert card.pulse.state == "unknown" and card.movement.state == "observed"
     assert card.eyes.icon == "closed" and card.blood.icon == "filled" and card.hint == ""
 
 
 def test_untestable_signs_show_a_dash_and_one_line_says_why():
     card = card_for(UNKNOWN)
-    assert values(card) == ["CAMERA MOVING", UNKNOWN_VALUE, UNKNOWN_VALUE, UNKNOWN_VALUE, UNKNOWN_VALUE]
+    assert values(card) == ["CAMERA MOVING"] + [UNKNOWN_VALUE] * 5
     assert {g.state for g in card.gauges} == {"unknown"}
     assert card.hint == "Hold the camera still to measure breathing"
     still = {**UNKNOWN, "movement": {"value": "still", "confidence": 0.9, "still_for_s": 3.0},
@@ -105,8 +106,9 @@ def test_what_happened_shows_under_the_gauges_most_important_first():
     assert [line.text for line in quiet.lines] == ["Hold the camera still to measure breathing"]
 
 
-def test_no_clinical_words_no_heart_rate_and_ascii_only():
-    rate = {**FINDINGS, "breathing": {"value": "motion_detected", "confidence": 0.7, "rate_bpm": 31.0}}
+def test_no_clinical_words_and_ascii_only():
+    rate = {**FINDINGS, "breathing": {"value": "motion_detected", "confidence": 0.7, "rate_bpm": 31.0},
+            "pulse": {"value": "estimated", "confidence": 0.7, "rate_bpm": 150}}
     for signs in (FINDINGS, UNKNOWN, rate, {**FINDINGS, **HISTORY}):
         card = card_for(signs, {"fall_ago_s": 5.0, "walked_ago_s": 9.0, "waved_ago_s": 1.0,
                                 "changes_ago_s": [3.0, 2.0]})
@@ -114,8 +116,8 @@ def test_no_clinical_words_no_heart_rate_and_ascii_only():
         texts += [line.text for line in card.notes]
         for text in texts:
             assert text.replace(UNKNOWN_VALUE, "").isascii()
-            assert not re.search(r"severity|critical|immediate|diagnos|triage|priority|heart|pulse|bpm", text, re.I)
-    assert card_for(rate).breathing.state == "observed"           # a rate is never colored by its value
+            assert not re.search(r"severity|critical|immediate|diagnos|triage|priority|bpm", text, re.I)
+    assert card_for(rate).breathing.state == card_for(rate).pulse.state == "observed"   # never colored by value
 
 
 def callout(number, signs=FINDINGS, in_view=True, context=None):
@@ -185,7 +187,7 @@ def test_a_box_follows_its_person_smoothly_and_is_forgotten_when_they_leave():
 
 def test_boxes_shrink_for_crowds_and_narrow_pictures():
     assert box_scale(1, 1280) == 1.0 and box_scale(3, 1280) == 0.85 and box_scale(9, 1280) == 0.72
-    assert box_scale(1, 600) == pytest.approx(0.81)
+    assert box_scale(1, 600) == pytest.approx(0.73)
     assert box_scale(1, 200) == 0.6                              # never unreadably small
 
 
@@ -194,8 +196,8 @@ def test_the_box_is_drawn_next_to_the_person_and_moves_with_them():
     scene = Scene([callout(1)])
     plain = render(image, [], Scene())
     here = np.argwhere((render(image, [track(1)], scene) != plain).any(axis=2))
-    there = np.argwhere((render(image, [track(1, dx=500)], scene) != plain).any(axis=2))
-    assert 400 < there[:, 1].mean() - here[:, 1].mean() < 600
+    there = np.argwhere((render(image, [track(1, dx=300)], scene) != plain).any(axis=2))
+    assert 200 < there[:, 1].mean() - here[:, 1].mean() < 400
     x1, y1, x2, y2 = BBOX
     assert here[:, 1].min() > x1 - BOX_W - 60 and here[:, 1].max() < x2 + BOX_W + 60
 

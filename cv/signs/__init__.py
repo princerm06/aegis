@@ -22,6 +22,7 @@ from cv.signs.eyes import EyeEstimator, EyeState, FaceScorer
 from cv.signs.history import HistoryEstimator, HistoryState
 from cv.signs.motion import IMAGE_FRAME, MotionEstimator, MotionState
 from cv.signs.position import PositionEstimator, PositionState
+from cv.signs.pulse import PulseEstimator, PulseState
 
 SCHEMA = "aegis-cv-signs/0.1"
 
@@ -34,6 +35,7 @@ class _TrackSigns:
     breathing: BreathingState = field(default_factory=BreathingState)
     history: HistoryState = field(default_factory=HistoryState)
     position: PositionState = field(default_factory=PositionState)
+    pulse: PulseState = field(default_factory=PulseState)
 
 
 class SignsEstimator:
@@ -49,6 +51,7 @@ class SignsEstimator:
         self.eyes = EyeEstimator(settings, scorer, keypoint_min_conf)
         self.history = HistoryEstimator(settings, keypoint_min_conf)
         self.position = PositionEstimator(settings, keypoint_min_conf)
+        self.pulse = PulseEstimator(settings, keypoint_min_conf)
         self.camera = CameraMotionEstimator(settings)
         self.camera_state = CameraMotionState() if settings.moving_camera else None
         self.states: dict[str, _TrackSigns] = {}
@@ -96,6 +99,9 @@ class SignsEstimator:
                 # Chest motion is only separable from camera motion on a still camera.
                 self.breathing.update(state.breathing, image, track.keypoints, track.keypoint_conf,
                                       still and camera in IMAGE_FRAME, t, shift)
+            if self.settings.pulse:
+                self.pulse.update(state.pulse, image, track.keypoints, track.keypoint_conf,
+                                  still and camera in IMAGE_FRAME, t)
             if self.settings.eyes and self.eyes.due(state.eyes, t):
                 self.eyes.update(state.eyes, image, track.keypoints, track.keypoint_conf, t)
             if self.settings.blood and self.blood.due(state.blood, t):
@@ -138,6 +144,8 @@ class SignsEstimator:
             signs["breathing"] = self.breathing.value(state.breathing, t)
         if self.settings.blood:
             signs["visible_blood"] = self.blood.value(state.blood, t)
+        if self.settings.pulse:
+            signs["pulse"] = self.pulse.value(state.pulse, t)
         if self.settings.history:
             signs["fall"] = self.history.fall(state.history, t, self.iso)
             signs["walking"] = self.history.walking(state.history, t, self.iso)
@@ -175,6 +183,9 @@ class SignsEstimator:
             context["breathing_remaining_s"] = max(0.0, needed - (t - breathing.started_t))
             context["breathing_needed_s"] = needed
             context["breathing_trace"] = chest_signal(breathing.times, breathing.displacement)
+        if self.settings.pulse:
+            context["pulse_measured_s"] = self.pulse.measured_s(state.pulse)
+            context["pulse_needed_s"] = self.settings.pulse_min_s
         history = state.history
         if history.fall_t is not None:
             context["fall_ago_s"] = t - history.fall_t

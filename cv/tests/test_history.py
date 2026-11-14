@@ -151,6 +151,10 @@ def test_a_real_snapshot_fits_the_proposed_backend_models_and_says_nothing_clini
     signs = estimator.snapshot(track, 40.0)
     estimator.states["s1-t1"].history.changes.append(("eyes", "open", "closed", 39.0))
     signs = estimator.snapshot(track, 40.0)
+    from cv.publisher import DISPLAY_ONLY_SIGNS
+
+    assert "pulse" in signs and "pulse" in DISPLAY_ONLY_SIGNS                # shown, never sent
+    signs = {name: sign for name, sign in signs.items() if name not in DISPLAY_ONLY_SIGNS}
     model = history_contract.CameraSignsWithHistory.model_validate(signs)
     assert model.limbs.value == "none_moved" and model.blood_spread.value == "stable"
     assert model.changes[0].from_value == "open"

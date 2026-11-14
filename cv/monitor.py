@@ -5,10 +5,10 @@ leader line in the person's color, that follows them. Four round gauges sit in
 fixed places with a fixed icon and label and one short value each, so a
 responder learns once where to look and reads it from across the room:
 
-    [3] LYING                  STILL 1:35      number (matches the dashboard), posture, movement
-     (lungs)   (eye)    (hand)    (drop)
-       16     CLOSED      NO       HEAD        one value per gauge
-    BREATHING  EYES   RESPONSE   BLOOD
+    [3] LYING                             STILL 1:35      number (matches the dashboard), posture, movement
+     (lungs)   (heart)    (eye)    (hand)    (drop)
+       16        72      CLOSED      NO       HEAD        one value per gauge
+    BREATHING PULSE EST.  EYES   RESPONSE   BLOOD
 
 The ring is the state: white = observed, amber = notable (no chest motion,
 eyes closed, no response, blood seen), dashed grey = the camera cannot tell or
@@ -16,8 +16,9 @@ nothing was asked yet, cyan = in progress (breathing being measured fills the
 ring; after a spoken command the ring drains while the camera watches for a
 response). When breathing cannot be measured, one grey line under the gauges
 says why. A trailing "?" marks a low detector confidence. Colors mark
-observations, not severity: nothing here is a diagnosis or a priority, and
-there is no heart rate (the camera cannot measure it). Up to two short notes
+observations, not severity: nothing here is a diagnosis or a priority. The
+pulse is an estimate from skin colour (signs/pulse.py), shown only for a still
+person with a big enough face and a clear rhythm. Up to two short notes
 under the gauges say what happened ("Fall seen 1:20 ago", "Waving now"). A
 person who just left the picture keeps a small "NOT IN VIEW" chip for a few
 seconds, then the top bar lists them with room and time ("3 ROOM 2 2:10").
@@ -51,7 +52,7 @@ MAX_VIEW_W = 1280
 MIN_VIEW_W = 720              # narrower (portrait) pictures get dark side margins for the cards
 TOP_BAR = 30
 BOTTOM_MARGIN = 40            # kept clear for warnings and the disclaimer
-BOX_W, BOX_H = 332, 134       # card without the hint line
+BOX_W, BOX_H = 410, 134       # card without the hint line
 HINT_H = 20                   # added per line under the gauges
 MAX_LINES = 2
 GAUGE_W = 78
@@ -89,6 +90,7 @@ TASK_TEXT = {"proposed": "TO APPROVE: {name}", "dispatched": "{name} DISPATCHED"
              "delivered": "{name} ALERTED", "acknowledged": "{name} ON THE WAY", "completed": "{name} REACHED"}
 DISCLAIMER = "Camera observations, not a diagnosis"
 UNKNOWN = "\u2013"            # en dash: "the camera cannot tell"
+PULSE = "PULSE EST."
 _SANS_BOLD = (("/System/Library/Fonts/HelveticaNeue.ttc", "Bold", "face"),
               ("DejaVuSans-Bold.ttf", None, "file"), ("arialbd.ttf", None, "file"))
 _FONTS = {   # (file, variation or face name, how): DIN signage faces first, then common fallbacks
@@ -110,7 +112,7 @@ class Line:
 
 @dataclass(frozen=True)
 class Gauge:
-    label: str                        # fixed per gauge: BREATHING, EYES, RESPONSE, BLOOD
+    label: str                        # fixed per gauge: BREATHING, PULSE EST., EYES, RESPONSE, BLOOD
     value: str                        # one short value, UNKNOWN when the camera cannot tell
     state: str = "observed"           # observed / attention / unknown / active
     unit: str = ""
@@ -129,10 +131,11 @@ class Card:
     blood: Gauge
     hint: str = ""                    # why breathing cannot be measured, when it cannot
     notes: tuple[Line, ...] = ()      # what happened: fall, blood spreading, a change, ...
+    pulse: Gauge = Gauge(PULSE, UNKNOWN, "unknown")
 
     @property
-    def gauges(self) -> tuple[Gauge, Gauge, Gauge, Gauge]:
-        return self.breathing, self.eyes, self.response, self.blood
+    def gauges(self) -> tuple[Gauge, Gauge, Gauge, Gauge, Gauge]:
+        return self.breathing, self.pulse, self.eyes, self.response, self.blood
 
     @property
     def lines(self) -> tuple[Line, ...]:
@@ -269,7 +272,19 @@ def card_for(signs: dict, context: dict | None = None) -> Card:
         bleed = Gauge("BLOOD", _marked("NOT SEEN", blood))
     else:
         bleed = Gauge("BLOOD", UNKNOWN, "unknown")
-    return Card(move, breath, eye, respond, bleed, hint, _notes(signs, context))
+    return Card(move, breath, eye, respond, bleed, hint, _notes(signs, context), _pulse(signs, context))
+
+
+def _pulse(signs: dict, context: dict) -> Gauge:
+    pulse = signs.get("pulse", {"value": "not_testable"})
+    if pulse["value"] == "estimated":
+        return Gauge(PULSE, _marked(f"{pulse['rate_bpm']:.0f}", pulse), unit="/min")
+    needed = context.get("pulse_needed_s")
+    if pulse.get("reason") == "measuring" and needed:
+        measured = context.get("pulse_measured_s", 0.0)
+        return Gauge(PULSE, f"{max(0.0, needed - measured):.0f} s", "active",
+                     progress=min(1.0, max(0.0, measured / needed)))
+    return Gauge(PULSE, UNKNOWN, "unknown")
 
 
 def _ago(seconds: float) -> str:
@@ -438,6 +453,15 @@ def _lungs(draw, cx, cy, color, k: float) -> None:
                                radius=w * 0.17 * k, outline=color, width=width)
 
 
+def _heart(draw, cx, cy, color, k: float) -> None:
+    t = np.linspace(0, 2 * np.pi, 40)
+    x = 16 * np.sin(t) ** 3
+    y = -(13 * np.cos(t) - 5 * np.cos(2 * t) - 2 * np.cos(3 * t) - np.cos(4 * t))
+    scale = 10.5 / 16
+    points = [((cx + scale * a) * k, (cy + scale * b) * k) for a, b in zip(x, y)]
+    draw.line(points + points[:1], fill=color, width=max(2, round(1.8 * k)), joint="curve")
+
+
 def _hand(draw, cx, cy, color, k: float) -> None:
     """A raised open hand: the response to "raise your hand if you hear me"."""
     width = max(2, round(1.8 * k))
@@ -491,6 +515,8 @@ def _gauge(draw, x: float, top: float, gauge: Gauge, k: float) -> None:
     _ring(draw, cx, cy, radius, gauge, k)
     if gauge.label == "BREATHING":
         _lungs(draw, cx, cy, icon_color, k)
+    elif gauge.label == PULSE:
+        _heart(draw, cx, cy + 1, icon_color, k)
     elif gauge.label == "EYES":
         _eye(draw, cx, cy, gauge.icon or "open", icon_color, k)
     elif gauge.label == "RESPONSE":
@@ -806,7 +832,7 @@ def _draw_leader(canvas, rect, anchor, color) -> None:
 def box_scale(people: int, view_w: int) -> float:
     """Smaller boxes for crowds and narrow pictures."""
     crowd = 1.0 if people <= 2 else 0.85 if people <= 4 else 0.72
-    return round(max(0.6, min(crowd, 0.45 * view_w / BOX_W)), 2)
+    return round(max(0.6, min(crowd, 0.5 * view_w / BOX_W)), 2)
 
 
 def room_label(zone_id: str | None) -> str:

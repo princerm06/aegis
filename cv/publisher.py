@@ -45,6 +45,7 @@ from cv.zones import ZoneMap
 log = logging.getLogger(__name__)
 MIN_CONFIDENCE_BUCKET = 0.5  # backend treats crossing this as an impactful change
 HISTORY_SIGNS = ("fall", "walking", "limbs", "waving", "blood_spread", "changes", "face_down", "person_nearby")
+DISPLAY_ONLY_SIGNS = ("pulse",)        # in no contract: never sent
 
 
 class TransportError(Exception):
@@ -193,9 +194,8 @@ class Publisher:
         return queued
 
     def _wire_signs(self, signs: dict) -> dict:
-        if self.settings.send_history:
-            return signs
-        return {name: sign for name, sign in signs.items() if name not in HISTORY_SIGNS}
+        dropped = DISPLAY_ONLY_SIGNS if self.settings.send_history else HISTORY_SIGNS + DISPLAY_ONLY_SIGNS
+        return {name: sign for name, sign in signs.items() if name not in dropped}
 
     def _signs_key(self, report: TrackReport) -> tuple:
         """Sign values (not confidences or timers): a change goes out on the next tick."""

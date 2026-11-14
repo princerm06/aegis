@@ -101,6 +101,11 @@ class SignsSettings:
     breathing_max_bpm: float = 40.0
     breathing_min_snr: float = 40.0     # velocity-spectrum peak over the rest of the band
     breathing_min_amplitude_px: float = 0.3
+    pulse: bool = True                  # pulse estimate from skin colour (signs/pulse.py), display only
+    pulse_window_s: float = 15.0
+    pulse_min_s: float = 10.0           # still, face in view, this long before a first estimate
+    pulse_min_eye_px: float = 14.0      # eye distance; smaller faces are not_testable
+    pulse_min_snr_db: float = 3.0       # peak and harmonic over the rest of the 42-180 /min band
     blood_spread_window_s: float = 30.0  # red area now vs earlier in this window
     blood_spread_ratio: float = 1.3     # this much more (or 1/x less) red area = growing (shrinking)
     history: bool = True                # fall, walking, limbs, waving, changes (signs/history.py),

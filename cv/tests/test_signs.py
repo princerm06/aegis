@@ -283,7 +283,7 @@ def test_snapshot_has_every_sign_and_no_clinical_fields():
     assert signs["schema"] == SCHEMA
     assert set(signs) == {"schema", "window_s", "posture", "movement", "response", "eyes",
                           "breathing", "visible_blood", "fall", "walking", "limbs", "waving", "face_down",
-                          "person_nearby", "blood_spread", "changes"}
+                          "person_nearby", "blood_spread", "changes", "pulse"}
     assert signs["fall"]["value"] == "not_seen" and signs["walking"]["value"] == "not_seen"
     assert signs["posture"] == {"value": "lying", "confidence": 0.82}
     assert signs["movement"]["value"] == "still"

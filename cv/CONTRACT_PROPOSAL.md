@@ -177,8 +177,9 @@ on the 6 stock clips of people lying, sleeping or in a car crash.
 
 ## Not proposed
 
-- **Heart rate:** the brief excludes camera-based heart rate (rPPG), and a
-  webcam at 2–3 m cannot measure it reliably.
+- **Pulse:** the camera view shows a pulse estimate from skin colour
+  (`cv/signs/pulse.py`), but it is not proposed for the contract until it is
+  checked against a pulse reference at the demo distance.
 - **CV output:** no injury type, diagnosis, severity or priority comes from
   CV.
 - **Automatic priority suggestions** from signs: on hold until validated.

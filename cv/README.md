@@ -7,8 +7,9 @@ and `../docs/LIVE_DEMO.md`.
 The CV module reports **observations with confidence** only: where a person is
 on the floor, how sure the detector is, whether the track is currently seen,
 and (with `--signs`) DARPA-style observed signs: posture, movement, response
-to a command, eyes, breathing motion and visible blood. It never outputs
-injury type, diagnosis, severity, triage or heart rate. The backend stores
+to a command, eyes, breathing motion and visible blood, plus a pulse
+estimate on the camera view only. It never outputs injury type, diagnosis,
+severity or triage. The backend stores
 and shows the signs; only the medic-confirmed priority is used for dispatch
 (`CONTRACT_PROPOSAL.md`). All scenes and casualties are simulated.
 
@@ -372,10 +373,10 @@ switches to the debug view with FPS, track states and publisher counters):
 Text and icons are drawn with Pillow (`pillow` in `requirements.txt`), in DIN
 Alternate / DIN Condensed where macOS has them.
 
-Colors mark observations, never severity, and there is no heart rate: the
-brief excludes camera-based heart rate and a webcam at 2–3 m cannot measure it.
-A pulse would need a contact sensor on the casualty. `signs_report
---save-video` writes this same view.
+Colors mark observations, never severity. The pulse gauge (PULSE EST.) is an
+estimate from skin colour, shown only on this view and never sent: it is not
+in the backend contract and is not validated against a pulse reference at the
+demo distance yet. `signs_report --save-video` writes this same view.
 
 | Sign | How | Needs |
 | --- | --- | --- |
@@ -384,6 +385,7 @@ A pulse would need a contact sensor on the casualty. `signs_report
 | eyes | MediaPipe Face Landmarker blink scores on a face crop rotated level (works for faces lying sideways). Head turned more than 25°: the higher eye score; more than 60°: `not_testable`. The model downloads into `cv/models/` on first use | Face ≥ 36 px across; at 2–3 m use 1080p capture |
 | breathing | Optical flow on the chest while still; rate only from a clear rhythm, same in both halves of 15 s | Person still ~11 s, chest visible |
 | visible blood | Deep-red pixels (green and blue ≤ 0.35 × red, hue ≤ 10 or ≥ 174) per body region: head, torso, arms, legs | No red, pink or magenta clothing or props: their shadows are blood-colored |
+| pulse (estimate, display only) | Mean skin colour of forehead and cheeks in an eye-aligned face patch, POS method (Wang et al. 2017) over 15 s, 42–180 /min band; a number only when the peak and its harmonic stand ≥ 3 dB over the rest of the band. Otherwise `not_testable`: face too small, moving, measuring, no clear rhythm | Still ≥ 10 s, eyes ≥ 14 px apart (camera about 1.5–2 m from the face at 1080p), even light, no glasses glare |
 
 **History and position observations** (on by default, `signs.history`).
 These follow the first questions of START triage (did they walk, did they
@@ -394,7 +396,7 @@ assigns the triage tag; CV never does.
 
 | Sign | How | Needs |
 | --- | --- | --- |
-| fall | The head drops by at least half the standing height within 1 s from standing or sitting, and the person ends lying (or in a flat box) within 5 s. Lying down slowly or sitting down fast is not a fall | Whole body in view before and after |
+| fall | The head drops by at least half the standing height within 1 s from standing or sitting, and the person ends lying (or in a flat box) within 2.5 s. Lying down slowly or sitting down fast is not a fall | Whole body in view before and after |
 | walking | Standing in at least 80% of 4 s and moving at least 0.8 body heights across the floor | Feet in view |
 | limbs | For each arm and leg, whether it moved relative to the body in the last 30 s; `some_not_moved` lists the ones that did not | Limbs visible for 15 s |
 | blood_spread | Red area relative to body size, now vs 30 s ago: `growing` at 1.3× or more, `shrinking` below 1/1.3 | Blood detected; same light |
@@ -670,7 +672,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-194 tests. The suite covers:
+202 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.
@@ -697,12 +699,16 @@ python -m pytest cv/tests
   fall with a new tracker ID staying the same person; a moving camera pausing
   them; a real snapshot fitting the proposed backend models; and the keys
   kept off the wire until the backend accepts them.
+- Pulse estimate: a faint synthetic colour pulse (55, 72, 110 /min, under one
+  grey level, in camera noise) found within 3 /min, also on a sideways face;
+  no number without a pulse, for small faces, moving people or short runs;
+  never sent to the backend.
 - Last seen: people who left listed with room and time, also after the
   tracker retires them, for 10 minutes.
 - Fake casualties: the scripted timeline, and the whole scene accepted by the
   in-process backend.
 - Responder view: amber findings, grey reasons, listening countdown, no
-  clinical words or heart rate, any frame size and crowd size; boxes stay in
+  clinical words, any frame size and crowd size; boxes stay in
   the frame beside their person, off faces and off each other, and follow
   smoothly. The operator's priority band: absent until linked and assessed,
   blinking from dispatch until acknowledged, and read back from the in-process
