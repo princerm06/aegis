@@ -97,9 +97,12 @@ def evaluate(weights_list: list[str], eval_seeds: list[int], outdir: str) -> dic
         "eval_seeds": list(eval_seeds),
         "weights": [Path(w).name for w in weights_list],
         "timing_note": (
-            "Totals compare prep plus run after warmup moved imports, model "
-            "loading, and first-call optimizer setup outside measurement. "
-            "No speed ranking is claimed from cold-start effects."
+            "Only prep-plus-run totals are comparable: PPO prep includes "
+            "env construction with all-pairs A* precompute while baseline "
+            "route costs sit inside the timed solve, so prep and run "
+            "buckets must not be compared across contenders. Warmup moved "
+            "imports, model loading, and first-call optimizer setup "
+            "outside measurement. No speed ranking is claimed."
         ),
         "rows": rows,
     }

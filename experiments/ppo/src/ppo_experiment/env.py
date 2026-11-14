@@ -16,6 +16,11 @@ feasibility mask with normalized A* route costs on the exact graph
 the solver sees; plus the elapsed step fraction. Reward grants
 allocation priority points minus scaled travel for each committed
 assignment, a small penalty per blocked attempt, and nothing else.
+That scalar signal differs from the core optimizer objective, which
+is lexicographic: count, then allocation priority points, then
+travel, then deterministic tie-breaks. Reported metrics are
+comparable across contenders while training objectives are not
+equal, so a PPO gap does not imply a metric-definition mismatch.
 Termination ends an episode when no feasible proposal remains or the
 stop action is taken. Truncation ends an episode at the step budget.
 They are reported separately.
@@ -202,14 +207,10 @@ class AllocationEnv(gym.Env):
                 self.invalid_attempts += 1
                 reward = -INVALID_PENALTY
             else:
-                if not self.pair_feasible.get(key, False):
-                    self.committed_violations += 1
-                    reward = -INVALID_PENALTY
-                else:
-                    self.assigned_casualties.add(ci)
-                    self.assigned_responders.add(ri)
-                    self.committed.append(key)
-                    reward = float(self.pair_points[key]) - self.pair_distance[key] / TRAVEL_SCALE
+                self.assigned_casualties.add(ci)
+                self.assigned_responders.add(ri)
+                self.committed.append(key)
+                reward = float(self.pair_points[key]) - self.pair_distance[key] / TRAVEL_SCALE
         if not terminated:
             if not self._remaining_feasible():
                 terminated = True

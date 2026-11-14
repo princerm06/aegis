@@ -121,7 +121,7 @@ SHAs in `reports/training.json`.
 - Nearest: 8 assigned / 14.0 points, 0 violations.
 - PPO seed 101: 4 assigned / 8.0 points, 0 violations,
   48 invalid attempts.
-- PPO seed 102: 6 assigned / 10.0 points, 0 violations,
+- PPO seed 102: 6 assigned / 12.0 points, 0 violations,
   41 invalid attempts.
 - Weights: `a5f66cbb...` (train101), `3d7106d0...` (train102);
   binaries stay local, SHAs committed.
@@ -137,6 +137,12 @@ single committed violation; eval seeds were not tuned.
   counts measure filtering, not learned safety.
 - PPO sees the full feasibility mask and route costs, so the gap to
   the optimizer is not a partial-observability artifact.
+- Reward is a scalar (points minus distance/20) while the optimizer
+  is lexicographic (count, then points, then travel): reported
+  metrics are comparable, training objectives are not equal.
+- Only prep-plus-run timing totals are comparable: PPO prep holds
+  the all-pairs A* precompute while baseline route costs sit inside
+  the timed solve, so prep/run buckets must not be ranked.
 - Bounded compute (8192 steps, CPU, default PPO hyperparameters);
   larger budgets might narrow the gap and were not tried.
 - Timing compares research-harness totals, not deployment latency.

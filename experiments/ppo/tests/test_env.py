@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 
 import numpy as np
@@ -252,6 +253,32 @@ def test_validator_accepts_solver_output():
         result.objective_values["allocation_priority_points"]
     )
     assert check["travel_distance_m"] == float(result.objective_values["new_travel_distance_m"])
+
+
+def test_report_aggregates_match_training_summary():
+    from pathlib import Path
+
+    reports = Path(__file__).resolve().parent.parent / "reports"
+    eval_report = json.load(open(reports / "eval_results.json"))
+    training = json.load(open(reports / "training.json"))
+    totals: dict[str, dict] = {}
+    for row in eval_report["rows"]:
+        if row["solver"] == "ppo":
+            name = "ppo_train" + row["weights"].split("train")[1].split(".")[0]
+        else:
+            name = row["solver"]
+        entry = totals.setdefault(name, {
+            "assigned_total": 0,
+            "points_total": 0.0,
+            "invalid_attempts_total": 0,
+            "violation_total": 0,
+        })
+        entry["assigned_total"] += row["assigned_count"]
+        entry["points_total"] += row["allocation_priority_points"]
+        entry["invalid_attempts_total"] += row["invalid_attempts"]
+        entry["violation_total"] += row["committed_violations"]
+    assert set(totals) == {"ortools", "nearest", "ppo_train101", "ppo_train102"}
+    assert totals == training["aggregated_outcomes"]
 
 
 def test_validator_catches_induced_violations():
