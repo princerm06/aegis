@@ -12,12 +12,6 @@ injury type, diagnosis, severity, triage or heart rate. The backend stores
 and shows the signs; only the medic-confirmed priority is used for dispatch
 (`CONTRACT_PROPOSAL.md`). All scenes and casualties are simulated.
 
-## Built with Cursor and Grok
-
-This module was written in Cursor with Grok. Grok drafted the pipeline, the
-tests and the responder-view cards; AskAr reviews each change and runs it on
-the camera. Grok never sees the live video and never sets a medical priority.
-
 ## Status
 
 | Phase | Scope | State |
