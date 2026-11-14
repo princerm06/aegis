@@ -10,6 +10,10 @@ All of these are observations of events, never an injury or a priority:
 - ``limbs``: per arm and leg, whether the hand or foot moved relative to the
   torso in the last ``limb_window_s``. ``some_not_moved`` is only reported when
   another limb clearly moved, so a still person is ``none_moved``.
+- ``waving``: a hand above the shoulder (along the torso) swinging back and
+  forth at least ``waving_min_reversals`` times within ``waving_window_s``,
+  without any command: someone trying to get attention. Measured relative to
+  the shoulder, so it also works on a moving camera.
 - ``changes``: the last few changes of a sign's value that held for
   ``change_hold_s`` (e.g. eyes open -> closed), with the time they started.
 
@@ -24,18 +28,21 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from cv.signs.body import (L_ANKLE, L_ELBOW, L_KNEE, L_SHOULDER, L_WRIST, NOSE, R_ANKLE, R_ELBOW, R_KNEE,
-                           R_SHOULDER, R_WRIST)
+from cv.signs.body import (L_ANKLE, L_ELBOW, L_HIP, L_KNEE, L_SHOULDER, L_WRIST, NOSE, R_ANKLE, R_ELBOW,
+                           R_HIP, R_KNEE, R_SHOULDER, R_WRIST)
 from cv.signs.motion import IMAGE_FRAME, Sample, body_frame
 
 UPRIGHT = ("standing", "sitting")
 LIMB_ENDS = {"left_arm": (L_ELBOW, L_WRIST), "right_arm": (R_ELBOW, R_WRIST),
              "left_leg": (L_KNEE, L_ANKLE), "right_leg": (R_KNEE, R_ANKLE)}
+ARMS = ((L_SHOULDER, L_WRIST), (R_SHOULDER, R_WRIST))
 TRACKED_SIGNS = ("posture", "movement", "response", "eyes", "breathing", "visible_blood")
 UNINFORMATIVE = ("not_testable", "not_tested", "unknown")
 MAX_CHANGES = 5
 LIMB_MOVED_SAMPLES = 5        # moved in at least this many samples of the window
 LIMB_MAX_CONFIDENCE = 0.6     # keypoint jitter on limbs is high
+WAVE_MIN_HALF_PERIOD_S = 0.15  # waving is at most about 3 back-and-forths a second
+WAVE_MAX_SPEED = 5.0          # body sizes per second; a waving hand peaks around 2.5
 
 
 @dataclass
@@ -65,6 +72,8 @@ class HistoryState:
     walk_t: float | None = None
     walk_distance: float = 0.0
     limbs: dict = field(default_factory=lambda: {name: deque() for name in LIMB_ENDS})   # (t, moved)
+    hands: tuple = field(default_factory=lambda: (deque(), deque()))   # per arm: (t, wrist - shoulder or None)
+    wave_t: float | None = None
     paused_t: float | None = None                          # last time the camera was moving
     signs: dict = field(default_factory=lambda: {name: _Change() for name in TRACKED_SIGNS})
     changes: deque = field(default_factory=lambda: deque(maxlen=MAX_CHANGES))       # (sign, from, to, t)
@@ -93,6 +102,7 @@ class HistoryEstimator:
                ground, bbox) -> None:
         settings, t = self.settings, sample.t
         state.first_t = t if state.first_t is None else state.first_t
+        self._update_waving(state, sample, posture, bbox)
         if sample.camera not in IMAGE_FRAME:
             state.paused_t = t
             state.points.clear()
@@ -161,6 +171,63 @@ class HistoryEstimator:
             while history and t - history[0][0] > settings.limb_window_s:
                 history.popleft()
 
+    def _update_waving(self, state: HistoryState, sample: Sample, posture: str, bbox) -> None:
+        """Upright: the hand must be above the shoulder (walking arm swing is not).
+        Lying: "above" has no meaning, so the arm must be held out from the body."""
+        settings, t, conf = self.settings, sample.t, sample.keypoint_conf
+        x1, y1, x2, y2 = bbox
+        scale = max(sample.scale, 0.5 * float(np.hypot(x2 - x1, y2 - y1)), 1.0)   # torso foreshortened when lying
+        points = up = None
+        for (shoulder, wrist), hand in zip(ARMS, state.hands):
+            while hand and t - hand[0][0] > settings.waving_window_s:
+                hand.popleft()
+            if sample.keypoints is None or conf[shoulder] < self.min_conf or conf[wrist] < self.min_conf:
+                hand.append((t, None))
+                continue
+            if points is None:
+                points, up = body_frame(sample, self.min_conf), np.array([0.0, -1.0])
+                hips = [i for i in (L_HIP, R_HIP) if conf[i] >= self.min_conf]
+                shoulders = [i for i in (L_SHOULDER, R_SHOULDER) if conf[i] >= self.min_conf]
+                if hips:
+                    axis = points[shoulders].mean(axis=0) - points[hips].mean(axis=0)
+                    if np.linalg.norm(axis) > 1.0:
+                        up = axis / np.linalg.norm(axis)
+            offset = (points[wrist] - points[shoulder]) / scale
+            raised = (float(np.linalg.norm(offset)) >= settings.waving_arm_out if posture == "lying"
+                      else float(offset @ up) > 0)
+            last = next(((ts, o) for ts, o in reversed(hand) if o is not None), None)
+            if raised and last is not None and t > last[0] and \
+                    float(np.linalg.norm(offset - last[1])) / (t - last[0]) > WAVE_MAX_SPEED:
+                hand.clear()                          # a keypoint jump (or left/right swap), not a hand
+            hand.append((t, offset if raised else None))
+            if self._swings(hand) >= settings.waving_min_reversals:
+                state.wave_t = t
+
+    def _swings(self, hand) -> int:
+        """Direction reversals of the raised hand along its main axis of motion."""
+        raised = [(t, offset) for t, offset in hand if offset is not None]
+        if (len(raised) < 8 or len(raised) < 0.7 * len(hand)
+                or hand[-1][0] - hand[0][0] < 0.8 * self.settings.waving_window_s):
+            return 0                                  # arms flung up in a fall last well under a second
+        times = [t for t, _ in raised]
+        points = np.array([offset for _, offset in raised])
+        centered = points - points.mean(axis=0)
+        track = centered @ np.linalg.svd(centered, full_matrices=False)[2][0]
+        swing = self.settings.waving_min_swing
+        reversals, direction, low, high, extreme, turned = 0, 0, track[0], track[0], track[0], times[0]
+        for t, value in zip(times[1:], track[1:]):
+            if direction == 0:
+                low, high = min(low, value), max(high, value)
+                if high - low >= swing:
+                    direction, extreme, turned = (1 if value == high else -1), value, t
+            elif direction * (value - extreme) > 0:
+                extreme = value
+            elif abs(value - extreme) >= swing:
+                if t - turned >= WAVE_MIN_HALF_PERIOD_S:  # keypoint jitter flips every frame; a hand cannot
+                    reversals += 1
+                direction, extreme, turned = -direction, value, t
+        return reversals
+
     def track_changes(self, state: HistoryState, values: dict[str, str], t: float) -> None:
         """Feed the current sign values (at most a few times a second)."""
         if t - state.last_change_check_t < 0.25:
@@ -196,6 +263,13 @@ class HistoryEstimator:
         if self._paused(state, t):
             return {"value": "not_testable", "confidence": 0.0, "reason": "camera_moving"}
         if state.first_t is None or t - state.first_t < self.settings.walk_window_s:
+            return {"value": "not_testable", "confidence": 0.0}
+        return {"value": "not_seen", "confidence": 0.5}
+
+    def waving(self, state: HistoryState, t: float, iso) -> dict:
+        if state.wave_t is not None:
+            return {"value": "seen", "confidence": 0.6, "at": iso(state.wave_t)}
+        if state.first_t is None or t - state.first_t < self.settings.waving_window_s:
             return {"value": "not_testable", "confidence": 0.0}
         return {"value": "not_seen", "confidence": 0.5}
 

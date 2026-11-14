@@ -29,6 +29,21 @@ class WalkingSign(CameraSign):
     at: AwareDatetime | None = None                     # last time walking was seen
 
 
+class WavingSign(CameraSign):
+    value: Literal["seen", "not_seen", "not_testable"]
+    at: AwareDatetime | None = None                     # last time waving was seen
+
+
+class FaceDownSign(CameraSign):
+    value: Literal["seen", "not_seen", "not_testable"]
+    for_s: SignDuration | None = None                   # only when seen
+
+
+class PersonNearbySign(CameraSign):
+    value: Literal["seen", "not_seen", "not_testable"]  # not_testable unless lying or sitting
+    for_s: SignDuration | None = None                   # only when seen
+
+
 class LimbsSign(CameraSign):
     value: Literal["all_moved", "some_not_moved", "none_moved", "not_testable"]
     window_s: SignDuration
@@ -52,5 +67,8 @@ class CameraSignsWithHistory(CameraSigns):
     fall: FallSign | None = None
     walking: WalkingSign | None = None
     limbs: LimbsSign | None = None
+    waving: WavingSign | None = None
+    face_down: FaceDownSign | None = None
+    person_nearby: PersonNearbySign | None = None
     blood_spread: BloodSpreadSign | None = None
     changes: list[SignChange] | None = Field(default=None, max_length=5)

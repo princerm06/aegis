@@ -9,24 +9,29 @@ clips:
     checks:
       - {kind: region, sign: visible_blood, value: head}
       - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
 
   - name: roses-no-blood                     # red roses next to a woman lying on the floor
     source: datasets/stock/pexels-woman-lying-floor.mp4
     checks:
       - {kind: no_blood, sign: visible_blood}
       - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
 
   - name: three-lying-no-blood
     source: datasets/stock/pexels-three-lying-overhead.mp4
     checks:
+      - {kind: absent, sign: person_nearby, value: seen}   # nobody upright next to them
       - {kind: no_blood, sign: visible_blood}
       - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
 
   - name: eyes-closed-man
     source: datasets/stock/pexels-man-eyes-closed-breathing.mp4
     checks:
       - {kind: value, sign: eyes, value: closed}
       - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
 
   - name: sleeping-man-eyes                  # handheld, slow pan
     source: datasets/stock/pexels-man-sleeping-720.mp4
@@ -34,12 +39,14 @@ clips:
     checks:
       - {kind: value, sign: eyes, value: closed}
       - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
 
   - name: sleeping-woman-eyes
     source: datasets/stock/pexels-woman-sleeping-720.mp4
     checks:
       - {kind: value, sign: eyes, value: closed}
       - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
 
   - {name: urfall-01-lying, source: datasets/urfall/fall-01-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
   - {name: urfall-02-lying, source: datasets/urfall/fall-02-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}

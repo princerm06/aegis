@@ -64,8 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--send-signs", action="store_true",
                         help="include signs in reports (needs the backend change in CONTRACT_PROPOSAL.md)")
     parser.add_argument("--send-history", action="store_true",
-                        help="with --send-signs, also send fall, walking, limbs, blood_spread, changes "
-                             "(the backend rejects them until it adds them)")
+                        help="with --send-signs, also send fall, walking, limbs, waving, face_down, "
+                             "person_nearby, blood_spread, changes (the backend rejects them until it adds them)")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
 
@@ -360,19 +360,19 @@ def fit_window(width: int, height: int, max_width: int = 1400) -> None:
         cv2.resizeWindow(WINDOW, int(width * scale), int(height * scale))
 
 
-_layout = None
+_layout = _last_seen = None
 
 
 def responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs, now, warnings):
-    from cv.monitor import CalloutLayout, build_scene, render
+    from cv.monitor import CalloutLayout, LastSeen, build_scene, render, room_label
 
-    global _layout
+    global _layout, _last_seen
     if _layout is None:
-        _layout = CalloutLayout()
+        _layout, _last_seen = CalloutLayout(), LastSeen()
     status = [settings.publisher.camera_id]
     keys = "C command given | V debug view | Q quit"
     if tracker.current_zone is not None:
-        status.append(f"ROOM {tracker.current_zone}")
+        status.append(room_label(tracker.current_zone))
         keys = f"1-{min(9, len(zone_map.zones))} room | " + keys
     if signs.camera_state is not None:
         status.append(f"camera {signs.camera_motion}")
@@ -381,7 +381,7 @@ def responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs,
     else:
         status.append("MOCK" if args.mock_backend else
                       ("backend offline" if pub["backing_off"] else "backend OK"))
-    return render(image, tracks, build_scene(tracks, signs, now), _layout, status, warnings, keys,
+    return render(image, tracks, build_scene(tracks, signs, now, _last_seen), _layout, status, warnings, keys,
                   settings.tracking.keypoint_min_conf)
 
 

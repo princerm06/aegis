@@ -6,7 +6,8 @@ import pytest
 
 from cv.monitor import UNKNOWN as UNKNOWN_VALUE
 from cv.monitor import (BOTTOM_MARGIN, BOX_H, BOX_W, CHIP_H, CHIP_W, HINT_H, MAX_VIEW_W, MIN_VIEW_W, TOP_BAR, VIEW_H,
-                        Callout, CalloutLayout, Scene, _anchor, _crosses, _inside, _leader_end, box_scale,
+                        Callout, CalloutLayout, LastSeen, Scene, _anchor, _crosses, _inside, _leader_end,
+                        _out_of_view, box_scale,
                         build_scene, card_for, identity_color, render)
 from cv.observations import PostureEstimate
 from cv.signs.body import L_HIP, L_SHOULDER, NOSE, R_HIP, R_SHOULDER
@@ -80,20 +81,26 @@ HISTORY = {
     "blood_spread": {"value": "growing", "confidence": 0.6, "window_s": 30.0, "change_pct": 45},
     "limbs": {"value": "some_not_moved", "confidence": 0.45, "window_s": 30.0, "not_moved": ["left_leg"]},
     "walking": {"value": "seen", "confidence": 0.7, "at": "2026-11-14T05:00:00.000Z"},
+    "waving": {"value": "seen", "confidence": 0.6, "at": "2026-11-14T05:00:04.000Z"},
+    "face_down": {"value": "seen", "confidence": 0.6, "for_s": 12.0},
+    "person_nearby": {"value": "seen", "confidence": 0.6, "for_s": 42.0},
     "changes": [{"sign": "movement", "from": "moving", "to": "still", "at": "2026-11-14T05:00:02.000Z"},
                 {"sign": "eyes", "from": "open", "to": "closed", "at": "2026-11-14T05:00:03.000Z"}],
 }
 
 
 def test_what_happened_shows_under_the_gauges_most_important_first():
-    context = {"fall_ago_s": 80.0, "walked_ago_s": 95.0, "changes_ago_s": [79.0, 40.0]}
+    context = {"fall_ago_s": 80.0, "walked_ago_s": 95.0, "waved_ago_s": 30.0, "changes_ago_s": [79.0, 40.0]}
     card = card_for({**UNKNOWN, **HISTORY}, context)
     assert [line.text for line in card.notes] == [
-        "Fall seen 1:20 ago", "Blood area growing, +45% in 30 s", "Eyes closed 40 s ago, were open",
-        "Not moved in 30 s: L LEG", "Walked 1:35 ago"]
+        "Fall seen 1:20 ago", "Face down for 12 s", "Waved 30 s ago", "Blood area growing, +45% in 30 s",
+        "Eyes closed 40 s ago, were open", "Not moved in 30 s: L LEG", "Someone next to them for 42 s",
+        "Walked 1:35 ago"]
+    assert card_for({**UNKNOWN, **HISTORY}, {**context, "waved_ago_s": 1.0}).notes[2].text == "Waving now"
+    card = card_for({**UNKNOWN, **{k: v for k, v in HISTORY.items() if k not in ("face_down", "waving")}}, context)
     assert [line.text for line in card.lines] == ["Fall seen 1:20 ago", "Blood area growing, +45% in 30 s"]
     assert {line.state for line in card.lines} == {"attention"}          # the breathing hint gives way
-    assert callout(1, {**UNKNOWN, **HISTORY}).size == (BOX_W, BOX_H + 2 * HINT_H)
+    assert callout(1, {**UNKNOWN, **HISTORY}, context=context).size == (BOX_W, BOX_H + 2 * HINT_H)
     quiet = card_for({**UNKNOWN, "fall": {"value": "not_seen", "confidence": 0.5}, "changes": []})
     assert [line.text for line in quiet.lines] == ["Hold the camera still to measure breathing"]
 
@@ -101,7 +108,8 @@ def test_what_happened_shows_under_the_gauges_most_important_first():
 def test_no_clinical_words_no_heart_rate_and_ascii_only():
     rate = {**FINDINGS, "breathing": {"value": "motion_detected", "confidence": 0.7, "rate_bpm": 31.0}}
     for signs in (FINDINGS, UNKNOWN, rate, {**FINDINGS, **HISTORY}):
-        card = card_for(signs, {"fall_ago_s": 5.0, "walked_ago_s": 9.0, "changes_ago_s": [3.0, 2.0]})
+        card = card_for(signs, {"fall_ago_s": 5.0, "walked_ago_s": 9.0, "waved_ago_s": 1.0,
+                                "changes_ago_s": [3.0, 2.0]})
         texts = values(card) + [g.label for g in card.gauges] + [g.unit for g in card.gauges] + [card.hint]
         texts += [line.text for line in card.notes]
         for text in texts:
@@ -212,6 +220,22 @@ def test_scene_comes_from_the_live_signs_and_hides_people_long_out_of_view():
     assert scene.hidden == 0 and [c.in_view for c in scene.callouts] == [True, False]
     canvas = render(image, [gone, seen], scene)
     assert canvas.shape[0] == VIEW_H
+
+
+def test_people_who_left_are_listed_with_room_and_time_even_after_the_tracker_forgets_them():
+    estimator = make_estimator()
+    image = body_image((300, 200, 340, 250))
+    seen = make_track()
+    seen.short_id, seen.zone_id, seen.published_xy, seen.last_seen = "t1", "room-2", None, 0.0
+    estimator.update(image, [seen], 0.0)
+    last_seen = LastSeen()
+    gone = SimpleNamespace(**{**vars(seen), "track_id": "s1-t3", "short_id": "t3", "detected": True})
+    assert build_scene([gone, seen], estimator, 0.0, last_seen).out_of_view == []
+    gone.detected = False
+    assert build_scene([gone, seen], estimator, 3.0, last_seen).out_of_view == []      # card still shown
+    scene = build_scene([seen], estimator, 130.0, last_seen)                          # retired by the tracker
+    assert scene.out_of_view[0][:2] == (3, "ROOM 2") and _out_of_view(scene) == ("OUT OF VIEW  #3 ROOM 2, 2:10 ago",)
+    assert build_scene([seen], estimator, 700.0, last_seen).out_of_view == []         # kept for 10 min
 
 
 def test_a_card_grows_by_one_line_only_when_it_has_something_to_explain():

@@ -16,8 +16,8 @@ Behaviour:
 - Unchanged tracks are re-sent every ``heartbeat_s``; changes go out on the next tick.
 - ``send_signs`` adds the ``signs`` object (cv/CONTRACT_PROPOSAL.md) to visible
   reports; a change of a sign's value counts as a change. ``send_history``
-  also sends the history signs (fall, walking, limbs, blood_spread, changes),
-  which the backend rejects until it adds them (cv/CONTRACT_PROPOSAL.md).
+  also sends the history and position signs (``HISTORY_SIGNS``), which the
+  backend rejects until it adds them (cv/CONTRACT_PROPOSAL.md).
 - Occluded/lost reports repeat the position, confidence and ``last_seen_at`` of
   the last report the backend *accepted* for that track, as the contract
   requires. Tracks the backend never accepted get no occluded/lost report.
@@ -44,7 +44,7 @@ from cv.zones import ZoneMap
 
 log = logging.getLogger(__name__)
 MIN_CONFIDENCE_BUCKET = 0.5  # backend treats crossing this as an impactful change
-HISTORY_SIGNS = ("fall", "walking", "limbs", "blood_spread", "changes")
+HISTORY_SIGNS = ("fall", "walking", "limbs", "waving", "blood_spread", "changes", "face_down", "person_nearby")
 
 
 class TransportError(Exception):

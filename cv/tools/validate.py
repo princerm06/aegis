@@ -153,7 +153,22 @@ TAKES = {take.name: take for take in (
     Take("sit-down", 30, STAND + "A chair behind you. When the voice says sit, sit down on it normally.",
          cues=((15, "Sit down"),), checks=(Check("absent", "fall", "seen"),)),
     Take("walk", 30, STAND + "When the voice says walk, walk slowly across the view and back.",
-         cues=((8, "Walk"),), checks=(Check("value", "walking", "seen", 16), Check("absent", "walking", "seen", 0, 7))),
+         cues=((8, "Walk"),), checks=(Check("value", "walking", "seen", 16), Check("absent", "walking", "seen", 0, 7),
+                                      Check("absent", "waving", "seen"))),
+    Take("wave", 30, STAND + "When the voice says wave, wave one hand above your head until the end.",
+         cues=((12, "Wave"),), checks=(Check("value", "waving", "seen", 18), Check("absent", "waving", "seen", 0, 11))),
+    Take("wave-lying", 35, LIE + "When the voice says wave, hold one arm up and wave it until the end.",
+         cues=((15, "Wave"),), checks=(Check("value", "waving", "seen", 21), Check("absent", "waving", "seen", 0, 14))),
+    Take("face-down", 45, "Lie face down two to three metres from the camera, whole body in view, forehead on "
+         "your folded arms. When the voice says turn, roll onto your back.", cues=((25, "Turn onto your back"),),
+         checks=(Check("value", "face_down", "seen", 8, 24), Check("absent", "face_down", "seen", 32))),
+    Take("side-facing-away", 30, "Lie on your side two to three metres from the camera, whole body in view, "
+         "your back to the camera.", checks=(Check("absent", "face_down", "seen"),)),
+    Take("helper-kneels", 40, LIE + "A second person waits out of view. When the voice says come in, they walk "
+         "in and kneel next to you until the end.", cues=((15, "Come in"),),
+         checks=(Check("value", "person_nearby", "seen", 25), Check("absent", "person_nearby", "seen", 0, 14))),
+    Take("walk-past", 30, LIE + "A second person walks past you, about one metre away, without stopping, "
+         "when the voice says go.", cues=((12, "Go"),), checks=(Check("absent", "person_nearby", "seen"),)),
     Take("one-arm", 55, LIE + "When the voice says move, keep moving only your right arm until the end.",
          cues=((10, "Move your right arm, keep everything else still"),),
          checks=(Check("value", "limbs", "some_not_moved", 40),)),

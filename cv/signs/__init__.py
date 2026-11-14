@@ -1,6 +1,7 @@
 """Observed signs per track: posture, movement, command response, eyes, breathing, blood,
-and what happened over time: a fall, walking, limbs that did not move, blood spreading,
-changes of the other signs (signs/history.py).
+what happened over time: a fall, walking, limbs that did not move, waving, blood spreading,
+changes of the other signs (signs/history.py), and lying face down or someone next to
+them (signs/position.py).
 
 Every sign is an observation with a confidence and an explicit ``not_testable``
 / ``not_tested``. Nothing here is a diagnosis, injury type, severity or
@@ -20,6 +21,7 @@ from cv.signs.camera_motion import CameraMotionEstimator, CameraMotionState
 from cv.signs.eyes import EyeEstimator, EyeState, FaceScorer
 from cv.signs.history import HistoryEstimator, HistoryState
 from cv.signs.motion import IMAGE_FRAME, MotionEstimator, MotionState
+from cv.signs.position import PositionEstimator, PositionState
 
 SCHEMA = "aegis-cv-signs/0.1"
 
@@ -31,6 +33,7 @@ class _TrackSigns:
     eyes: EyeState = field(default_factory=EyeState)
     breathing: BreathingState = field(default_factory=BreathingState)
     history: HistoryState = field(default_factory=HistoryState)
+    position: PositionState = field(default_factory=PositionState)
 
 
 class SignsEstimator:
@@ -45,6 +48,7 @@ class SignsEstimator:
                                            settings.eyes_turned_deg, settings.eyes_max_yaw_deg)
         self.eyes = EyeEstimator(settings, scorer, keypoint_min_conf)
         self.history = HistoryEstimator(settings, keypoint_min_conf)
+        self.position = PositionEstimator(settings, keypoint_min_conf)
         self.camera = CameraMotionEstimator(settings)
         self.camera_state = CameraMotionState() if settings.moving_camera else None
         self.states: dict[str, _TrackSigns] = {}
@@ -96,8 +100,12 @@ class SignsEstimator:
                 self.eyes.update(state.eyes, image, track.keypoints, track.keypoint_conf, t)
             if self.settings.blood and self.blood.due(state.blood, t):
                 self.blood.update(state.blood, image, track.bbox, track.keypoints, track.keypoint_conf, t)
-            if self.settings.history and t - state.history.last_change_check_t >= 0.25:
-                self.history.track_changes(state.history, self._values(track, state, t), t)
+            if self.settings.history:
+                self.position.update_face(state.position, track, (image.shape[1], image.shape[0]), t)
+                if t - state.history.last_change_check_t >= 0.25:
+                    self.history.track_changes(state.history, self._values(track, state, t), t)
+        if self.settings.history:
+            self.position.update_nearby({k: s.position for k, s in self.states.items()}, tracks, t)
 
     def _values(self, track, state: _TrackSigns, t: float) -> dict[str, str]:
         values = {"posture": track.posture.label,
@@ -134,6 +142,9 @@ class SignsEstimator:
             signs["fall"] = self.history.fall(state.history, t, self.iso)
             signs["walking"] = self.history.walking(state.history, t, self.iso)
             signs["limbs"] = self.history.limbs(state.history, t)
+            signs["waving"] = self.history.waving(state.history, t, self.iso)
+            signs["face_down"] = self.position.face_down(state.position, t)
+            signs["person_nearby"] = self.position.person_nearby(state.position, t)
             if self.settings.blood:
                 signs["blood_spread"] = self.blood.spread(state.blood, t,
                                                           signs["visible_blood"]["value"] == "detected")
@@ -169,6 +180,8 @@ class SignsEstimator:
             context["fall_ago_s"] = t - history.fall_t
         if history.walk_t is not None:
             context["walked_ago_s"] = t - history.walk_t
+        if history.wave_t is not None:
+            context["waved_ago_s"] = t - history.wave_t
         context["changes_ago_s"] = [t - at for *_, at in history.changes
                                     if t - at <= self.settings.change_keep_s]
         return context

@@ -125,7 +125,7 @@ def collect(source: str, settings, *, step: float = 1.0, start: float = 0.0, max
 
     from cv.clock import Timebase
     from cv.detector import Detector
-    from cv.monitor import CalloutLayout, build_scene, render
+    from cv.monitor import CalloutLayout, LastSeen, build_scene, render
     from cv.signs import SignsEstimator
     from cv.tracker import TrackManager
 
@@ -146,7 +146,7 @@ def collect(source: str, settings, *, step: float = 1.0, start: float = 0.0, max
     timebase = Timebase(monotonic=lambda: 0.0, wall=lambda: datetime(2000, 1, 1, tzinfo=timezone.utc))
     signs = SignsEstimator(settings.signs, timebase.iso, settings.tracking.keypoint_min_conf)
     signs.prepare()
-    writer, layout = None, CalloutLayout()
+    writer, layout, last_seen = None, CalloutLayout(), LastSeen()
     commands = sorted(command_at)
     samples: dict[str, list[tuple[float, dict]]] = {}
     seen_s: Counter = Counter()
@@ -173,7 +173,7 @@ def collect(source: str, settings, *, step: float = 1.0, start: float = 0.0, max
                 next_sample[track.track_id] = t + step
                 samples.setdefault(track.track_id, []).append((t, signs.snapshot(track, t)))
         if save_video:
-            canvas = render(image, tracks, build_scene(tracks, signs, t), layout, [f"t = {t:.1f} s"],
+            canvas = render(image, tracks, build_scene(tracks, signs, t, last_seen), layout, [f"t = {t:.1f} s"],
                             keypoint_min_conf=settings.tracking.keypoint_min_conf)
             if writer is None:
                 writer = cv2.VideoWriter(save_video, cv2.VideoWriter_fourcc(*"mp4v"), fps,

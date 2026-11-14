@@ -87,6 +87,27 @@ def test_limbs_that_did_not_move_are_named_only_when_another_limb_moved():
     assert estimator.limbs(state, 5.0)["value"] == "not_testable"
 
 
+def test_waving_is_a_raised_hand_swinging_and_not_a_walking_arm_or_a_held_up_hand():
+    def arm(t, wrist_y, swing):
+        keypoints = KEYPOINTS.copy()
+        keypoints[R_ELBOW] = (265, (150 + wrist_y) / 2)
+        keypoints[R_WRIST] = (250 + swing * np.sin(2 * np.pi * 1.5 * t), wrist_y)
+        return keypoints
+
+    estimator, state = run([(t, arm(t, 60, 40), "standing", None) for t in times(0, 4)])
+    waving = estimator.waving(state, 4.0, iso)
+    assert waving["value"] == "seen" and waving["confidence"] <= 0.6 and float(waving["at"][2:]) >= 3.0
+    estimator, state = run([(t, arm(t, 280, 40), "standing", None) for t in times(0, 4)])   # arm swing, hand low
+    assert estimator.waving(state, 4.0, iso)["value"] == "not_seen"
+    estimator, state = run([(t, arm(t, 60, 0), "standing", None) for t in times(0, 4)])     # hand up, still
+    assert estimator.waving(state, 4.0, iso)["value"] == "not_seen"
+    flips = [(t, arm(0.25 if int(t * 3) % 2 else 0.75, 60, 60), "standing", None) for t in times(0, 4)]
+    estimator, state = run(flips)                                  # keypoint jumping between two places
+    assert estimator.waving(state, 4.0, iso)["value"] == "not_seen"
+    estimator, state = run([(t, arm(t, 60, 40), "standing", None) for t in times(0, 1)])
+    assert estimator.waving(state, 1.0, iso)["value"] == "not_testable"
+
+
 def test_a_change_counts_once_it_held_and_flicker_does_not():
     estimator, state = HistoryEstimator(SETTINGS), HistoryState()
     timeline = [(t, "open") for t in np.arange(0, 10, 0.5)] + [(t, "closed") for t in np.arange(10, 12, 0.5)]

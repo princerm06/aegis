@@ -17,8 +17,10 @@ ring; after a spoken command the ring drains while the camera watches for a
 response). When breathing cannot be measured, one grey line under the gauges
 says why. A trailing "?" marks a low detector confidence. Colors mark
 observations, not severity: nothing here is a diagnosis or a priority, and
-there is no heart rate (the camera cannot measure it). A person who just left
-the picture keeps a small "NOT IN VIEW" chip for a few seconds.
+there is no heart rate (the camera cannot measure it). Up to two short notes
+under the gauges say what happened ("Fall seen 1:20 ago", "Waving now"). A
+person who just left the picture keeps a small "NOT IN VIEW" chip for a few
+seconds, then the top bar lists them with room and time ("3 ROOM 2 2:10").
 
 Cards are drawn with Pillow (DIN signage faces where available) and cached
 until a value changes; placement avoids other cards, faces, bodies and crossing
@@ -49,7 +51,9 @@ GAUGE_W = 78
 CHIP_W, CHIP_H = 156, 34      # a person just out of view
 EDGE_W = 5                    # the identity color along the card's left edge
 SUPERSAMPLE = 2
-HIDE_UNSEEN_AFTER_S = 5.0     # people out of view this long lose their card
+HIDE_UNSEEN_AFTER_S = 5.0     # people out of view this long lose their card ...
+LAST_SEEN_KEEP_S = 600.0      # ... and are listed in the top bar with where and when, this long
+LAST_SEEN_LISTED = 3
 LOW_CONFIDENCE = 0.55         # below this a value gets a trailing "?"
 SMOOTHING = 0.3               # share of the way a card moves to its target each frame
 
@@ -143,6 +147,29 @@ class Callout:
 class Scene:
     callouts: list[Callout] = field(default_factory=list)
     hidden: int = 0                   # tracked, long out of view
+    out_of_view: list[tuple[int, str, float]] = field(default_factory=list)   # (number, room, seconds ago)
+
+
+class LastSeen:
+    """Where and when each person was last seen, kept after they leave the picture
+    (and after the tracker retires them), so the top bar can say "3 ROOM 2 2:10"."""
+
+    def __init__(self, keep_s: float = LAST_SEEN_KEEP_S):
+        self.keep_s = keep_s
+        self.people: dict[str, tuple[int, str, float]] = {}
+
+    def update(self, tracks: Sequence, now: float) -> list[tuple[int, str, float]]:
+        in_view = set()
+        for track in tracks:
+            self.people[track.track_id] = (track_number(track), room_label(getattr(track, "zone_id", None)),
+                                           track.last_seen)
+            if track.detected or now - track.last_seen <= HIDE_UNSEEN_AFTER_S:
+                in_view.add(track.track_id)
+        for track_id, (_, _, seen) in list(self.people.items()):
+            if now - seen > self.keep_s:
+                del self.people[track_id]
+        return sorted(((number, room, now - seen) for track_id, (number, room, seen) in self.people.items()
+                       if track_id not in in_view), key=lambda person: person[2])
 
 
 def _marked(text: str, sign: dict) -> str:
@@ -237,11 +264,18 @@ _CHANGE_NOTES = {   # (sign, new value): text with {ago} and {was}; only changes
 
 
 def _notes(signs: dict, context: dict) -> tuple[Line, ...]:
-    """What happened, most important first: fall, blood spreading, a change, limbs, walking."""
+    """What happened, most important first: fall, face down, waving, blood spreading, a change,
+    limbs, then someone with them and walking (observed, not notable)."""
     notes = []
     if signs.get("fall", {}).get("value") == "seen":
         ago = context.get("fall_ago_s")
         notes.append(Line("Fall seen" + (f" {_ago(ago)} ago" if ago is not None else ""), "attention"))
+    face_down = signs.get("face_down", {})
+    if face_down.get("value") == "seen":
+        notes.append(Line(f"Face down for {_ago(face_down.get('for_s', 0))}", "attention"))
+    if signs.get("waving", {}).get("value") == "seen" and context.get("waved_ago_s") is not None:
+        ago = context["waved_ago_s"]
+        notes.append(Line("Waving now" if ago < 2 else f"Waved {_ago(ago)} ago", "attention"))
     spread = signs.get("blood_spread", {})
     if spread.get("value") == "growing":
         notes.append(Line(f"Blood area growing, +{spread['change_pct']}% in {spread['window_s']:.0f} s",
@@ -261,6 +295,9 @@ def _notes(signs: dict, context: dict) -> tuple[Line, ...]:
     if limbs.get("value") == "some_not_moved":
         names = ", ".join(REGION_NAMES.get(n, n) for n in limbs["not_moved"])
         notes.append(Line(f"Not moved in {limbs['window_s']:.0f} s: {names}", "attention"))
+    nearby = signs.get("person_nearby", {})
+    if nearby.get("value") == "seen":
+        notes.append(Line(f"Someone next to them for {_ago(nearby.get('for_s', 0))}"))
     if signs.get("walking", {}).get("value") == "seen" and context.get("walked_ago_s") is not None:
         notes.append(Line(f"Walked {_ago(context['walked_ago_s'])} ago"))
     return tuple(notes)
@@ -275,9 +312,10 @@ def identity_color(number: int) -> tuple[int, int, int]:
     return PALETTE[(number - 1) % len(PALETTE)]
 
 
-def build_scene(tracks: Sequence, signs, now: float) -> Scene:
-    """Cards for everyone in view or just out of it, in ID order."""
-    scene = Scene()
+def build_scene(tracks: Sequence, signs, now: float, last_seen: LastSeen | None = None) -> Scene:
+    """Cards for everyone in view or just out of it, in ID order; with ``last_seen``,
+    also who left the picture, where and when."""
+    scene = Scene(out_of_view=last_seen.update(tracks, now) if last_seen is not None else [])
     for track in sorted(tracks, key=track_number):
         snapshot = signs.snapshot(track, now)
         if snapshot is None:
@@ -708,6 +746,20 @@ def box_scale(people: int, view_w: int) -> float:
     return round(max(0.6, min(crowd, 0.45 * view_w / BOX_W)), 2)
 
 
+def room_label(zone_id: str | None) -> str:
+    return (zone_id or "").replace("-", " ").upper()
+
+
+def _out_of_view(scene: Scene) -> tuple[str, ...]:
+    """Top bar: "OUT OF VIEW  #3 ROOM 2, 2:10 ago  ·  #5, 40 s ago", newest first."""
+    if not scene.out_of_view:
+        return (f"+{scene.hidden} not in view",) if scene.hidden else ()
+    people = [f"#{number}{' ' + room if room else ''}, {_ago(ago)} ago"
+              for number, room, ago in scene.out_of_view[:LAST_SEEN_LISTED]]
+    more = len(scene.out_of_view) - LAST_SEEN_LISTED
+    return ("OUT OF VIEW  " + "  \u00b7  ".join(people) + (f"  \u00b7  +{more}" if more > 0 else ""),)
+
+
 def render(image, tracks: Sequence, scene: Scene, layout: CalloutLayout | None = None,
            status: Sequence[str] = (), warnings: Sequence[str] = (), keys: str = "",
            keypoint_min_conf: float = 0.5) -> np.ndarray:
@@ -755,7 +807,7 @@ def render(image, tracks: Sequence, scene: Scene, layout: CalloutLayout | None =
         if callout.track_id in positions:
             x, y = positions[callout.track_id]
             _blend(canvas, _box(callout, scale), x, y)
-    items = tuple(status) + ((f"+{scene.hidden} not in view",) if scene.hidden else ())
+    items = tuple(status) + _out_of_view(scene)
     _blend(canvas, _strip(items, keys, view_w), 0, 0)
     for index, line in enumerate(warnings):
         _blend(canvas, _label(line, AMBER, 13), 10, view_h - 34 - 30 * index)

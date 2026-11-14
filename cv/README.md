@@ -272,9 +272,13 @@ the box center. Posture comes from:
 The result is majority-voted over 15 frames.
 
 **Re-attach:** if ByteTrack issues a new ID close to a track that is currently
-unseen and not yet lost (0.6 m on the floor; 8 % of the frame diagonal in zones
-mode), the old track ID continues, so casualties don't need re-linking after
-an occlusion. Set `tracking.reattach: false` to disable it.
+unseen and not yet lost (0.6 m on the floor when calibrated; otherwise in the
+image, 8 % of the frame diagonal or 0.6 of the person's box, whichever is
+larger), the old track ID continues, so casualties don't need re-linking after
+an occlusion. The box-sized radius matters for falls: the detector often
+starts a new ID as someone goes down, and the person must stay the same track
+for the fall (and their history) to be seen. Set `tracking.reattach: false` to
+disable it.
 
 ## Observed signs (`--signs`)
 
@@ -308,16 +312,18 @@ switches to the debug view with FPS, track states and publisher counters):
   breathing cannot be measured, one grey line says why ("Hold the camera
   still to measure breathing", "Chest not visible").
 - **What happened, under the gauges:** up to two short notes from the history
-  observations below, most important first: "Fall seen 1:20 ago", "Blood area
-  growing, +45% in 30 s", "Eyes closed 40 s ago, were open", "Not moved in
-  30 s: L LEG", then "Walked 2:10 ago" in white.
+  observations below, most important first: "Fall seen 1:20 ago", "Face down
+  for 0:12", "Waving now", "Blood area growing, +45% in 30 s", "Eyes closed
+  40 s ago, were open", "Not moved in 30 s: L LEG", then in white "Someone
+  next to them for 0:42" and "Walked 2:10 ago".
 - **Placement:** a card goes beside its person where it covers no other card,
   no one's chest point and as few faces and bodies as possible, and where its
   line crosses no other line, card or face. It glides, and jumps rather than
   crossing another card. Portrait pictures get dark side margins for the
   cards. Cards shrink for more than 2 and more than 4 people. Someone who
-  leaves the picture keeps a small `NOT IN VIEW` chip (no line) for 5 s and
-  is then counted in the top bar.
+  leaves the picture keeps a small `NOT IN VIEW` chip (no line) for 5 s, and
+  is then listed in the top bar with room and time, newest first, for 10
+  minutes (`OUT OF VIEW  3 ROOM 2 2:10`), also after the tracker retires them.
 - **Design sources:** AFRL BATDOK (an icon per vital, a dash when missing)
   and AR triage studies (ARTTS, ISMAR 2022; smart-glasses triage, JMIR 2019;
   MXR-CDS Triage, MHSRS): one marker per casualty and as little to read as
@@ -340,10 +346,12 @@ A pulse would need a contact sensor on the casualty. `signs_report
 | breathing | Optical flow on the chest while still; rate only from a clear rhythm, same in both halves of 15 s | Person still ~11 s, chest visible |
 | visible blood | Deep-red pixels (green and blue ≤ 0.35 × red, hue ≤ 10 or ≥ 174) per body region: head, torso, arms, legs | No red, pink or magenta clothing or props: their shadows are blood-colored |
 
-**History observations** (on by default, `signs.history`). These follow the
-first questions of START triage (did they walk, did they fall, is the
-bleeding getting worse, has anything changed), answered only with what the
-camera saw. The responder assigns the triage tag; CV never does.
+**History and position observations** (on by default, `signs.history`).
+These follow the first questions of START triage (did they walk, did they
+fall, is the bleeding getting worse, has anything changed) and what saves a
+responder time (who is waving for help, who is face down, who already has
+someone with them), answered only with what the camera saw. The responder
+assigns the triage tag; CV never does.
 
 | Sign | How | Needs |
 | --- | --- | --- |
@@ -351,10 +359,17 @@ camera saw. The responder assigns the triage tag; CV never does.
 | walking | Standing in at least 80% of 4 s and moving at least 0.8 body heights across the floor | Feet in view |
 | limbs | For each arm and leg, whether it moved relative to the body in the last 30 s; `some_not_moved` lists the ones that did not | Limbs visible for 15 s |
 | blood_spread | Red area relative to body size, now vs 30 s ago: `growing` at 1.3× or more, `shrinking` below 1/1.3 | Blood detected; same light |
+| waving | A hand above the shoulder (along the torso) swinging back and forth at least 3 times in 3 s; lying: an arm held out and swinging. A walking arm swing (hand low) or a hand held up still is not waving | Shoulder and wrist visible for 3 s |
+| face_down | Lying, both shoulders and a hip seen, shoulders wide (at least 0.45 of the torso length), the head inside the picture, and no nose or eyes for 3 s. On the side with the back to the camera: `not_testable` | Whole torso in view |
+| person_nearby | Someone lying or sitting has another person who is not lying within 1.5 m on the floor (uncalibrated: feet within 0.6 body sizes of their box) for 2 s | Both people detected |
 | changes | The last 5 changes of posture, movement, response, eyes, breathing or blood, each held for 3 s | — |
 
 A moving camera pauses fall, walking and limbs (`not_testable`,
-`camera_moving`) and starts them over. They are not sent until the backend
+`camera_moving`) and starts them over; waving is measured relative to the
+shoulder and keeps working. Limits: a face turned sideways on the floor can
+show the nose, so it reads as not face down; `person_nearby` without floor
+calibration uses image distance, so someone standing far behind a person in
+the picture can count. They are not sent until the backend
 accepts them: `--send-history` (with `--send-signs`) turns that on once Prince
 adds the models in `history_contract.py` ("History signs" in
 `CONTRACT_PROPOSAL.md`). Until then they appear in the window, `signs_report`
@@ -396,8 +411,10 @@ Results (Nov 14):
 | Data | What it showed |
 | --- | --- |
 | CEW, 2,423 labelled faces | Face found 98–100%. Eyes 95.5% correct at threshold 0.4 (closed 94.6%, open 96.3%). The old 0.5 missed 15% of closed eyes |
-| UR Fall, 10 falls (320×240 Kinect) | 9 of 10 end as `lying`; 6 of 10 keep one ID through the fall. Without floor calibration the tracker cannot re-attach a person after a split. `fall: seen` in 8 of 10 (the two misses lose the person mid-fall) |
-| Stock clips of people lying, sleeping, car crash (6) | No false `fall` |
+| UR Fall, 10 falls (320×240 Kinect) | 9 of 10 end as `lying`. `fall: seen` in 10 of 10 since the image re-attach scales with the person's box (8 of 10 before: in two clips the detector started a new ID mid-fall). No waving on any of them once the hand must be watched for most of 3 s (arms flung up in a fall read as waving before) |
+| Stock clips of people lying, sleeping, car crash (6) | No false `fall`, `waving`, `face_down` or `person_nearby`. Before two fixes: the three people lying side by side read as "someone next to them" (two had posture `unknown` from overhead; now only standing or sitting people count), and a sleeping woman adjusting her pillow read as waving (now at least 5 swings of 0.2 body sizes in 3 s) |
+| MPSC lying and seated clips (13 people) | No false `fall`, `face_down` or `person_nearby`. Two still, breathing people read as waving from single-frame keypoint jumps; a hand now has to move no faster than 5 body sizes a second, and the window restarts after a jump |
+| Waving, face down, person nearby (positive cases) | Not on public video yet: unit-tested only. Record the `wave`, `face-down` and `helper-kneels` takes |
 | Pexels sleeping man, side profile | Eyes `closed` 88% of testable samples. Before the turned-head fix, 0%: the hidden eye's score dragged the mean to "open" |
 | Pexels three men lying, overhead | Eyes follow the clip: closed 0–6 s, open about 7–15 s, closing again |
 | Mixkit car-crash head wound | Blood `detected` on the head 55% of samples (the wound is out of view in most of the rest). Before the head threshold (2%), 0% |
@@ -407,7 +424,7 @@ Results (Nov 14):
 ### Validation takes and the benchmark (one command)
 
 ```sh
-python -m cv.tools.validate --list               # the 18 takes and how to do each
+python -m cv.tools.validate --list               # the 25 takes and how to do each
 python -m cv.tools.record --take breathe-12      # Logitech by default; a voice reads the setup and cues
 python -m cv.tools.validate                      # score every take and every benchmark clip (~2 min)
 ```
@@ -421,9 +438,12 @@ Takes: `breathe-12`, `breathe-20`, `breathe-blanket`, `breath-hold`,
 false-alarm takes `clean`, `red-clothing`, `led-grid`, `red-props`, and for
 the history observations `fall-to-mat` (onto a thick mat, knees first, never
 thrown), `lie-down-slowly` and `sit-down` (must not read as a fall), `walk`,
-`one-arm` (only the right arm moves) and `blood-spreading` (more fake blood
-added mid-take). Clips go to `cv/recordings/validation/` (git-ignored) with
-the take in the sidecar.
+`one-arm` (only the right arm moves), `blood-spreading` (more fake blood
+added mid-take), `wave` and `wave-lying`, `face-down` (then rolling onto the
+back) and `side-facing-away` (must not read as face down), and with a second
+person `helper-kneels` and `walk-past` (must not count as someone with them).
+For "last seen", walk out of view and check the top bar. Clips go to
+`cv/recordings/validation/` (git-ignored) with the take in the sidecar.
 
 `validate` scores each check 0–1 (higher is better) inside its time window:
 breathing rate within 2/min of the pace, no rate while the breath is held,
@@ -611,7 +631,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-185 tests. The suite covers:
+190 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.
@@ -632,9 +652,14 @@ python -m pytest cv/tests
 - History observations: a fast drop is a fall and lying down slowly is not;
   walking vs standing and crawling; one arm moving leaves the other limbs
   listed as not moved; a change counts only once it holds; blood spread
-  growing vs stable; a moving camera pausing them; a real snapshot fitting
-  the proposed backend models; and the keys kept off the wire until the
-  backend accepts them.
+  growing vs stable; waving vs a walking arm swing and a hand held up still;
+  face down vs face seen, lying on the side and head out of the picture;
+  someone next to a person down vs walking past, far away or also lying; a
+  fall with a new tracker ID staying the same person; a moving camera pausing
+  them; a real snapshot fitting the proposed backend models; and the keys
+  kept off the wire until the backend accepts them.
+- Last seen: people who left listed with room and time, also after the
+  tracker retires them, for 10 minutes.
 - Fake casualties: the scripted timeline, and the whole scene accepted by the
   in-process backend.
 - Responder view: amber findings, grey reasons, listening countdown, no
