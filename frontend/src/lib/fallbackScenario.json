@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "id": "demo",
+  "name": "Synthetic three-casualty coordination scene",
+  "synthetic": true,
+  "frame_id": "demo-floor-1",
+  "created_at": "2026-11-13T12:00:00Z",
+  "casualties": [
+    {
+      "id": "casualty-001",
+      "position": {"frame_id": "demo-floor-1", "x_m": 4.0, "y_m": 8.0},
+      "medical_assessment": null
+    },
+    {
+      "id": "casualty-002",
+      "position": {"frame_id": "demo-floor-1", "x_m": 12.0, "y_m": 5.0},
+      "medical_assessment": null
+    },
+    {
+      "id": "casualty-003",
+      "position": {"frame_id": "demo-floor-1", "x_m": 18.0, "y_m": 14.0},
+      "medical_assessment": null
+    }
+  ],
+  "responders": [
+    {
+      "id": "responder-001",
+      "display_name": "Mock Responder Alpha",
+      "position": {"frame_id": "demo-floor-1", "x_m": 0.0, "y_m": 0.0},
+      "status": "available"
+    },
+    {
+      "id": "responder-002",
+      "display_name": "Mock Responder Bravo",
+      "position": {"frame_id": "demo-floor-1", "x_m": 20.0, "y_m": 0.0},
+      "status": "available"
+    }
+  ]
+}

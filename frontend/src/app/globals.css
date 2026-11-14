@@ -1,0 +1,461 @@
+@import "tailwindcss";
+
+/* Dark is the default. [data-theme="dark"] on an element re-scopes it to dark (e.g. video tiles in light mode). */
+:root,
+[data-theme="dark"] {
+  --bg: #06090d;
+  --panel: #0b1117;
+  --panel-2: #101921;
+  --line: #1b2731;
+  --line-strong: #2a3a47;
+  --text: #dbe5ee;
+  --muted: #7f909f;
+  --faint: #4b5a67;
+
+  --accent: #38d0dc;
+  --accent-dim: #164c52;
+  --warn: #f5a524;
+  --ok: #3ecf7a;
+  --danger: #f05252;
+  --info: #5b9cf5;
+
+  /* Triage display colors (labels are always human-entered). */
+  --sev-immediate: #ef4444;
+  --sev-delayed: #eab308;
+  --sev-minor: #22c55e;
+  --sev-expectant: #8b95a3;
+  --sev-deceased: #3a4450;
+  --sev-unassessed: #c9d4de;
+
+  /* Landing-page tokens (dark default) */
+  color-scheme: dark;
+  --on-accent: #041014;
+  --accent-hover: #5fdde6;
+  --accent-glow: rgba(56, 208, 220, 0.1);
+  --grid-line: rgba(56, 208, 220, 0.045);
+  --warn-bright: #ffe2a8;
+  --card-top: rgba(16, 25, 33, 0.88);
+  --card-bottom: rgba(11, 17, 23, 0.88);
+  --shadow-lift: 0 28px 60px -30px rgba(0, 0, 0, 0.85);
+  --scene-shadow: 0 40px 120px -40px rgba(56, 208, 220, 0.25);
+
+  /* Dashboard surfaces (dark) */
+  --on-ok: #03170b;
+  --on-warn: #1c1100;
+  --on-sev: #05080b;
+  --on-sev-deceased: #cbd5e1;
+  --tone-info: #0b1626;
+  --tone-ok: #0a1a10;
+  --tone-warn: #1f1606;
+  --tone-danger: #260b0b;
+  --danger-text: #fecaca;
+  --map-floor: #080d12;
+  --map-hatch-bg: #18222b;
+  --map-hatch-line: #33434f;
+  --map-unknown: #0d1318;
+  --map-cell-line: #121b23;
+  --map-edit-hover: #2a1c10;
+  --map-obstacle: #56687a;
+  --map-mark-bg: #0b1117;
+  --map-mark-outline: #06090d;
+
+  /* Semantic aliases */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --surface: var(--panel);
+  --surface-secondary: var(--panel-2);
+  --border: var(--line);
+  --accent-muted: var(--accent-dim);
+  --text-secondary: var(--muted);
+  --warning: var(--warn);
+}
+
+/* Light theme — set on <html data-theme> by ThemeProvider (landing page and dashboard). */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f3ef;
+  --panel: #ffffff;
+  --panel-2: #faf8f4;
+  --line: #e2ded6;
+  --line-strong: #c8c3b9;
+  --text: #172029;
+  --muted: #4c5763;
+  --faint: #66707a;
+  --accent: #0a717c;
+  --accent-dim: #d3eaec;
+  --accent-hover: #075c66;
+  --on-accent: #ffffff;
+  --warn: #965f00;
+  --ok: #1c7a44;
+  --danger: #b4383a;
+  --info: #2d6cc0;
+  --sev-unassessed: #3a4652;
+  --accent-glow: rgba(10, 113, 124, 0.09);
+  --grid-line: rgba(10, 113, 124, 0.07);
+  --warn-bright: #d99a2b;
+  --card-top: rgba(255, 255, 255, 0.94);
+  --card-bottom: rgba(250, 248, 244, 0.94);
+  --shadow-lift: 0 26px 50px -30px rgba(38, 46, 56, 0.35);
+  --scene-shadow: 0 40px 100px -50px rgba(10, 113, 124, 0.4);
+
+  /* Severity colors darkened for contrast on light surfaces (same meaning, same order). */
+  --sev-immediate: #c62828;
+  --sev-delayed: #a16207;
+  --sev-minor: #15803d;
+  --sev-expectant: #64707d;
+  --sev-deceased: #3a4450;
+
+  --on-ok: #ffffff;
+  --on-warn: #ffffff;
+  --on-sev: #ffffff;
+  --on-sev-deceased: #e9eef3;
+  --tone-info: #e6eefa;
+  --tone-ok: #e3f2e8;
+  --tone-warn: #fbf0dc;
+  --tone-danger: #fbe5e5;
+  --danger-text: #8a1f21;
+  --map-floor: #fbfaf7;
+  --map-hatch-bg: #e4e0d8;
+  --map-hatch-line: #b9b3a8;
+  --map-unknown: #efece6;
+  --map-cell-line: #ebe7e0;
+  --map-edit-hover: #f7e3c4;
+  --map-obstacle: #7b8692;
+  --map-mark-bg: #ffffff;
+  --map-mark-outline: #ffffff;
+}
+
+/* Theme change crossfade (View Transitions API, where supported) */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.4s;
+  animation-timing-function: ease;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-warn: var(--warn);
+  --color-ok: var(--ok);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-on-accent: var(--on-accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-ok: var(--on-ok);
+  --color-on-warn: var(--on-warn);
+  --color-tone-info: var(--tone-info);
+  --color-tone-ok: var(--tone-ok);
+  --color-tone-warn: var(--tone-warn);
+  --color-tone-danger: var(--tone-danger);
+  --color-danger-text: var(--danger-text);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -2;
+  }
+}
+.route-proposed {
+  animation: dash-flow 1.2s linear infinite;
+}
+
+@keyframes ring-pulse {
+  0% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+.pulse-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ring-pulse 1.8s ease-out infinite;
+}
+
+@keyframes blink-soft {
+  50% {
+    opacity: 0.35;
+  }
+}
+.blink {
+  animation: blink-soft 1.4s ease-in-out infinite;
+}
+
+/* Diagonal hatching background for the SIMULATION banner */
+.sim-stripe {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(245, 165, 36, 0.16) 0 8px,
+    rgba(245, 165, 36, 0.06) 8px 16px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-proposed,
+  .pulse-ring,
+  .blink {
+    animation: none;
+  }
+}
+
+/* Attention flash for alert targets */
+@keyframes attention {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 165, 36, 0); }
+  50% { box-shadow: 0 0 0 3px rgba(245, 165, 36, 0.75); }
+}
+.flash {
+  animation: attention 0.9s ease-in-out 4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .flash { animation: none; outline: 2px solid var(--warn); }
+}
+
+/* ───────────── Landing page (lp-*) ───────────── */
+html {
+  scroll-padding-top: 72px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+.lp-grid {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.lp-grid-fade {
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, #000 40%, transparent 100%);
+}
+.lp-eyebrow {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.lp-card {
+  background: linear-gradient(180deg, var(--card-top), var(--card-bottom));
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.lp-corners {
+  position: relative;
+}
+.lp-corners::before,
+.lp-corners::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: var(--line-strong);
+  pointer-events: none;
+}
+.lp-corners::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+}
+.lp-corners::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+}
+.lp-glow {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent),
+    0 0 24px -6px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+@keyframes lp-draw {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+.lp-route-draw {
+  stroke-dasharray: 100;
+  animation: lp-draw 2.4s ease-out 0.4s both;
+}
+@keyframes lp-packet {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+.lp-packet {
+  stroke-dasharray: 4 96;
+  animation: lp-packet 3s linear infinite;
+}
+.lp-packet-slow {
+  stroke-dasharray: 3 97;
+  animation: lp-packet 4.5s linear infinite;
+}
+@keyframes lp-scan {
+  0%, 100% { opacity: 0.08; }
+  50% { opacity: 0.18; }
+}
+.lp-scan {
+  animation: lp-scan 3.2s ease-in-out infinite;
+}
+@keyframes lp-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.lp-progress {
+  transform-origin: left;
+  animation: lp-progress var(--lp-dur, 4s) linear both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-route-draw,
+  .lp-packet,
+  .lp-packet-slow,
+  .lp-scan,
+  .lp-progress {
+    animation: none;
+  }
+  .lp-packet,
+  .lp-packet-slow {
+    opacity: 0;
+  }
+  .lp-progress {
+    transform: scaleX(1);
+  }
+}
+
+/* ── 3D + micro-interactions ── */
+.lp-press {
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.lp-press:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.lp-press:active:not(:disabled) {
+  transform: translateY(1px) scale(0.97);
+  box-shadow: none;
+}
+
+.lp-motion-card {
+  --rx: 0deg;
+  --ry: 0deg;
+  --lift: 0px;
+  transform: perspective(1000px) rotateX(var(--rx)) rotateY(var(--ry)) translate3d(0, var(--lift), 0);
+  transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.35s ease, border-color 0.35s ease;
+}
+.lp-motion-card:hover {
+  --lift: -4px;
+  box-shadow: var(--shadow-lift);
+  border-color: var(--line-strong);
+}
+.lp-motion-card:hover .lp-icon {
+  transform: translateY(-2px) rotate(-6deg);
+  color: var(--accent);
+}
+.lp-icon {
+  transition: transform 0.3s ease, color 0.3s ease;
+}
+
+.lp-panel-3d {
+  --ry: 0deg;
+  transform: perspective(1400px) rotateY(var(--ry)) translate3d(0, 0, 0);
+  transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.45s ease;
+}
+.lp-panel-3d:hover,
+.lp-panel-3d:focus-within {
+  transform: perspective(1400px) rotateY(calc(var(--ry) * 0.3)) translate3d(0, -6px, 28px);
+  box-shadow: var(--shadow-lift);
+}
+@media (min-width: 1024px) {
+  .lp-panel-3d[data-side="left"] { --ry: 5deg; }
+  .lp-panel-3d[data-side="right"] { --ry: -5deg; }
+}
+
+.lp-entity {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1), filter 0.3s ease;
+  cursor: pointer;
+  outline: none;
+}
+.lp-entity[data-on="true"] {
+  transform: translateY(-5px) scale(1.06);
+  filter: drop-shadow(0 7px 5px rgba(0, 0, 0, 0.45));
+}
+
+.lp-plate {
+  transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0.3s ease;
+  cursor: pointer;
+  outline: none;
+}
+
+@keyframes lp-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-28px, -14px, 0); }
+}
+.lp-drift {
+  animation: lp-drift 26s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-press,
+  .lp-motion-card,
+  .lp-panel-3d,
+  .lp-entity,
+  .lp-plate {
+    transition: none;
+    transform: none !important;
+  }
+  .lp-drift {
+    animation: none;
+  }
+}
