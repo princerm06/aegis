@@ -97,3 +97,18 @@ def test_without_a_camera_list_the_configured_index_is_used():
     camera = Camera(CameraSettings(index=3, name="C922"), lister=lambda: None)
     assert camera.resolve_index() == 3
     assert Camera(CameraSettings(index=4), lister=lambda: 1 / 0).resolve_index() == 4   # no name: no lookup
+
+
+def test_a_camera_hung_upside_down_or_sideways_is_turned_upright():
+    image = np.arange(2 * 3 * 3, dtype=np.uint8).reshape(2, 3, 3)
+    for degrees, expected in ((180, image[::-1, ::-1]), (90, np.rot90(image, -1)), (270, np.rot90(image))):
+        camera = Camera(CameraSettings(rotate=degrees), opener=lambda: FakeCapture([image]))
+        frame = camera.read()
+        assert np.array_equal(frame.image, expected) and camera.resolution == expected.shape[1::-1]
+    camera = Camera(CameraSettings(rotate=45), opener=lambda: FakeCapture([image]))
+    try:
+        camera.read()
+    except ValueError as error:
+        assert "rotate" in str(error)
+    else:
+        raise AssertionError("45 degrees accepted")

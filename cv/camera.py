@@ -60,6 +60,16 @@ def find_camera(name: str, cameras: Sequence[tuple[str, str]]) -> int | None:
                  if wanted in label.casefold() or wanted in model.casefold()), None)
 
 
+def rotate(image, degrees: int):
+    """Turn a frame clockwise by 90, 180 or 270 degrees (a camera mounted sideways or upside down)."""
+    import cv2
+
+    codes = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
+    if degrees % 360 not in codes:
+        raise ValueError(f"camera.rotate must be 0, 90, 180 or 270, not {degrees}")
+    return cv2.rotate(image, codes[degrees % 360])
+
+
 def camera_override(settings: CameraSettings, value: str | None) -> CameraSettings:
     """``--camera 1`` picks an index, ``--camera C922`` a name."""
     if value is None:
@@ -221,6 +231,8 @@ class Camera:
         now = self._clock()
         if ok and image is not None:
             self._failing_since = None
+            if not self.is_file and self.settings.rotate:
+                image = rotate(image, self.settings.rotate)
             self.resolution = (int(image.shape[1]), int(image.shape[0]))
             if self.is_file and self.pace:
                 if self._file_start is None:

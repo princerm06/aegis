@@ -22,6 +22,7 @@ class CameraSettings:
     width: int = 1280
     height: int = 720
     fps: int = 30
+    rotate: int = 0                 # 0 / 90 / 180 / 270 clockwise, e.g. 180 for a camera hung upside down
     reconnect_after_s: float = 2.0
     retry_interval_s: float = 1.0
 
