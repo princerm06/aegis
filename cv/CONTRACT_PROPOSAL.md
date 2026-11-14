@@ -48,14 +48,14 @@ legacy route), present only on `visible` reports:
 }
 ```
 
-| Sign | `value` | Extra fields | How it is measured |
-| --- | --- | --- | --- |
-| `posture` | `standing` / `sitting` / `lying` / `unknown` | – | Pose keypoints on the floor plane, 15-frame vote (already used internally) |
-| `movement` | `moving` / `still` / `not_testable` | `still_for_s` | Keypoint motion normalized by body size. `still_for_s` restarts after the camera moved |
-| `response` | `responded` / `no_response` / `not_tested` | `command_at` | Limb motion in the window after the operator marks a spoken command |
-| `eyes` | `open` / `closed` / `not_testable` | – | MediaPipe Face Landmarker blink scores on the face crop; `not_testable` when the face is turned away or too small |
-| `breathing` | `motion_detected` / `no_motion_detected` / `not_testable` | `rate_bpm` (only when detected) | Optical flow on the chest while the person is still, clear spectral peak in 6–40 /min in both halves of a 15 s window. `no_motion_detected` = chest motion under 0.3 px (low confidence); irregular motion = `not_testable`. Tuned to miss faint breathing rather than report breathing that is not there |
-| `visible_blood` | `detected` / `not_detected` / `not_testable` | `regions`, `method` | Deep-red pixels (green and blue ≤ 0.35 × red, which excludes skin and lips) inside body regions from keypoints (`color`), later a fine-tuned model (`model`). Red clothing triggers it |
+| Sign            | `value`                                                   | Extra fields                    | How it is measured                                                                                                                                                                                                                                                                                        |
+| --------------- | --------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `posture`       | `standing` / `sitting` / `lying` / `unknown`              | –                               | Pose keypoints on the floor plane, 15-frame vote (already used internally)                                                                                                                                                                                                                                |
+| `movement`      | `moving` / `still` / `not_testable`                       | `still_for_s`                   | Keypoint motion normalized by body size. `still_for_s` restarts after the camera moved                                                                                                                                                                                                                    |
+| `response`      | `responded` / `no_response` / `not_tested`                | `command_at`                    | Limb motion in the window after the operator marks a spoken command                                                                                                                                                                                                                                       |
+| `eyes`          | `open` / `closed` / `not_testable`                        | –                               | MediaPipe Face Landmarker blink scores on the face crop; `not_testable` when the face is turned away or too small                                                                                                                                                                                         |
+| `breathing`     | `motion_detected` / `no_motion_detected` / `not_testable` | `rate_bpm` (only when detected) | Optical flow on the chest while the person is still, clear spectral peak in 6–40 /min in both halves of a 15 s window. `no_motion_detected` = chest motion under 0.3 px (low confidence); irregular motion = `not_testable`. Tuned to miss faint breathing rather than report breathing that is not there |
+| `visible_blood` | `detected` / `not_detected` / `not_testable`              | `regions`, `method`             | Deep-red pixels (green and blue ≤ 0.35 × red, which excludes skin and lips) inside body regions from keypoints (`color`), later a fine-tuned model (`model`). Red clothing triggers it                                                                                                                    |
 
 **Moving cameras (bodycam, handheld).** These add `camera_motion`, measured from
 the background:
@@ -65,11 +65,11 @@ the background:
 "breathing": {"value": "not_testable", "confidence": 0.0, "reason": "camera_moving"}
 ```
 
-| `camera_motion.value` | Effect on the other signs |
-| --- | --- |
-| `still` | As on a fixed camera |
+| `camera_motion.value`                               | Effect on the other signs                                                                                |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `still`                                             | As on a fixed camera                                                                                     |
 | `steady` (sway) / `unknown` (too little background) | Movement and response measured relative to the body (`still` confidence ≤ 0.6); breathing `not_testable` |
-| `moving` (walking, turning) | Movement and response `not_testable` / `not_tested` too |
+| `moving` (walking, turning)                         | Movement and response `not_testable` / `not_tested` too                                                  |
 
 Posture, eyes and blood are judged per frame and are not affected. A sign that
 is `not_testable` or `not_tested` because of the camera carries
@@ -131,16 +131,16 @@ only with `--send-history` (`publisher.send_history`), because the current
 "changes":       [{"sign": "eyes", "from": "open", "to": "closed", "at": "2026-11-15T14:03:40.000Z"}]
 ```
 
-| Key | Values | What it means |
-| --- | --- | --- |
-| `fall` | `seen`, `not_seen`, `not_testable` | The head dropped by at least half the body height within 1 s from standing or sitting, and the person stayed down. `at` is when the drop started. Lying down slowly or sitting down is not a fall. |
-| `walking` | `seen`, `not_seen`, `not_testable` | Standing and moving across the floor (at least 0.8 body heights in 4 s). `at` is the last time. |
-| `limbs` | `all_moved`, `some_not_moved`, `none_moved`, `not_testable` | Which arms and legs moved relative to the body in the last 30 s. `not_moved` lists the ones that did not. It shows an absence of movement only, not a cause. |
-| `waving` | `seen`, `not_seen`, `not_testable` | A hand above the shoulder swinging back and forth (lying: an arm held out and swinging), with or without a command. `at` is the last time. A swinging arm while walking is not waving. |
-| `face_down` | `seen`, `not_seen`, `not_testable` | Lying with the body seen, wide across the shoulders, the head in the picture and no face for 3 s. Lying on the side with the back to the camera is `not_testable`, not face down. A face turned sideways on the floor may show the nose and read `not_seen`. `for_s` is how long. |
-| `person_nearby` | `seen`, `not_seen`, `not_testable` | Someone lying or sitting has another person who is not lying within about 1.5 m (or half a body length of their box without floor calibration) for at least 2 s. `not_testable` when the person is standing. It does not say who that is. |
-| `blood_spread` | `growing`, `stable`, `shrinking`, `not_testable` | The red area seen now compared with 30 s ago, relative to body size. It is sent only when blood colour is detected, and the colour detection limits on `visible_blood` apply to it too. |
-| `changes` | up to 5 entries | The last notable changes of the existing signs, each held for at least 3 s, for example eyes from `open` to `closed`, or response from `responded` to `no_response`. |
+| Key             | Values                                                      | What it means                                                                                                                                                                                                                                                                     |
+| --------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fall`          | `seen`, `not_seen`, `not_testable`                          | The head dropped by at least half the body height within 1 s from standing or sitting, and the person stayed down. `at` is when the drop started. Lying down slowly or sitting down is not a fall.                                                                                |
+| `walking`       | `seen`, `not_seen`, `not_testable`                          | Standing and moving across the floor (at least 0.8 body heights in 4 s). `at` is the last time.                                                                                                                                                                                   |
+| `limbs`         | `all_moved`, `some_not_moved`, `none_moved`, `not_testable` | Which arms and legs moved relative to the body in the last 30 s. `not_moved` lists the ones that did not. It shows an absence of movement only, not a cause.                                                                                                                      |
+| `waving`        | `seen`, `not_seen`, `not_testable`                          | A hand above the shoulder swinging back and forth (lying: an arm held out and swinging), with or without a command. `at` is the last time. A swinging arm while walking is not waving.                                                                                            |
+| `face_down`     | `seen`, `not_seen`, `not_testable`                          | Lying with the body seen, wide across the shoulders, the head in the picture and no face for 3 s. Lying on the side with the back to the camera is `not_testable`, not face down. A face turned sideways on the floor may show the nose and read `not_seen`. `for_s` is how long. |
+| `person_nearby` | `seen`, `not_seen`, `not_testable`                          | Someone lying or sitting has another person who is not lying within about 1.5 m (or half a body length of their box without floor calibration) for at least 2 s. `not_testable` when the person is standing. It does not say who that is.                                         |
+| `blood_spread`  | `growing`, `stable`, `shrinking`, `not_testable`            | The red area seen now compared with 30 s ago, relative to body size. It is sent only when blood colour is detected, and the colour detection limits on `visible_blood` apply to it too.                                                                                           |
+| `changes`       | up to 5 entries                                             | The last notable changes of the existing signs, each held for at least 3 s, for example eyes from `open` to `closed`, or response from `responded` to `no_response`.                                                                                                              |
 
 No confidence goes above 0.9 (limbs, waving, face down and person nearby 0.6,
 blood spread 0.8). A moving camera makes `fall`, `walking` and `limbs`
