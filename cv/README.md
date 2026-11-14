@@ -410,11 +410,10 @@ A moving camera pauses fall, walking and limbs (`not_testable`,
 shoulder and keeps working. Limits: a face turned sideways on the floor can
 show the nose, so it reads as not face down; `person_nearby` without floor
 calibration uses image distance, so someone standing far behind a person in
-the picture can count. They are not sent until the backend
-accepts them: `--send-history` (with `--send-signs`) turns that on once Prince
-adds the models in `history_contract.py` ("History signs" in
-`CONTRACT_PROPOSAL.md`). Until then they appear in the window, `signs_report`
-and `validate` only.
+the picture can count. With `--send-signs` they are sent to the backend,
+which accepts them since PR #12 (the models of `history_contract.py`,
+"History signs" in `CONTRACT_PROPOSAL.md`); `publisher.send_history: false`
+holds them back for an older backend.
 
 Before the demo, check the actual fake blood under the room light: run
 `--signs`, put blood on one actor, and confirm `blood: <region>` appears and

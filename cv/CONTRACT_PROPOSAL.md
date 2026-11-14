@@ -116,9 +116,9 @@ Eight optional keys on top of the current `signs`. They answer the questions a
 responder asks first (did they walk, did they fall, are they waving for help,
 are they face down, is someone already with them, is the bleeding getting
 worse, has anything changed, is a limb not moving), all as things seen on
-camera. The human still assigns the simulated triage priority. CV sends them
-only with `--send-history` (`publisher.send_history`), because the current
-`CameraSigns` (`extra="forbid"`) would reject them.
+camera. The human still assigns the simulated triage priority. **Accepted by
+the backend since PR #12**; CV sends them with `--send-signs`
+(`publisher.send_history`, on by default).
 
 ```json
 "fall":          {"value": "seen", "confidence": 0.7, "at": "2026-11-15T14:03:12.400Z"},
@@ -157,7 +157,7 @@ in sync. To accept the keys:
    every new key is optional.
 2. Nothing else changes: they are stored and exposed with the other signs and
    never feed the solver or the priority.
-3. Tell CV, and we turn on `--send-history`.
+3. Tell CV, and we turn on `--send-history`. (Done in PR #12; on by default.)
 
 For Hillary: show a seen `fall`, `face_down` and `waving`, a `growing`
 `blood_spread`, a limb in `not_moved` and the latest entry in `changes` as

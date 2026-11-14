@@ -16,8 +16,9 @@ Behaviour:
 - Unchanged tracks are re-sent every ``heartbeat_s``; changes go out on the next tick.
 - ``send_signs`` adds the ``signs`` object (cv/CONTRACT_PROPOSAL.md) to visible
   reports; a change of a sign's value counts as a change. ``send_history``
-  also sends the history and position signs (``HISTORY_SIGNS``), which the
-  backend rejects until it adds them (cv/CONTRACT_PROPOSAL.md).
+  (on by default) also sends the history and position signs (``HISTORY_SIGNS``),
+  accepted since backend PR #12. ``DISPLAY_ONLY_SIGNS`` (the pulse estimate)
+  are never sent.
 - Occluded/lost reports repeat the position, confidence and ``last_seen_at`` of
   the last report the backend *accepted* for that track, as the contract
   requires. Tracks the backend never accepted get no occluded/lost report.

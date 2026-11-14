@@ -69,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="include signs in reports (needs the backend change in CONTRACT_PROPOSAL.md)")
     parser.add_argument("--send-history", action="store_true",
                         help="with --send-signs, also send fall, walking, limbs, waving, face_down, "
-                             "person_nearby, blood_spread, changes (the backend rejects them until it adds them)")
+                             "person_nearby, blood_spread, changes (the default since backend PR #12)")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
 

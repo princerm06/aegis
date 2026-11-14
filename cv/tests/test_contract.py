@@ -219,3 +219,38 @@ def test_operator_priority_and_dispatch_read_back_for_the_responder_view():
     state = post(f"/assignments/{assignment['id']}/simulate-device-event", {"kind": "acknowledged"})["state"]
     mark = marks_from_state(state, "logitech-1")["s1-t1"]
     assert mark.status == "acknowledged" and not mark.waiting
+
+
+def test_real_signs_with_history_are_accepted_and_the_pulse_stays_on_the_camera():
+    from dataclasses import replace
+
+    from cv.tests.test_signs import body_image, make_estimator, make_track
+
+    estimator, track = make_estimator(), make_track()
+    image = body_image((300, 200, 340, 250))
+    for i in range(400):                                    # 40 s: every history sign becomes testable
+        estimator.update(image, [track], i / 10)
+    estimator.states["s1-t1"].history.changes.append(("eyes", "open", "closed", 39.0))
+    signs = estimator.snapshot(track, 40.0)
+    assert "pulse" in signs and signs["changes"]
+
+    client = TestClient(create_app())
+    client.post("/api/v1/simulations/demo/reset", json={"mode": "simulation"})
+
+    def transport(method, path, body):
+        response = client.request(method, path, json=body)
+        return response.status_code, response.json()
+
+    timebase = Timebase()
+    publisher = Publisher(PublisherSettings(endpoint="camera", heartbeat_s=0.0, send_signs=True, send_history=True),
+                          frame_id="demo-floor-1", calibration_ref="cv-demo-floor-1-test",
+                          session_id="s1", timebase=timebase, transport=transport)
+    now = timebase.now()
+    publisher.submit([replace(report(now), signs=signs)], now)
+    publisher.step()
+    assert publisher.stats.rejected == 0, publisher.stats.last_error
+    (stored,) = [t["latest_observation"]["signs"] for t in client.get("/api/v1/simulations/demo/state").json()["tracks"]]
+    for name in ("fall", "walking", "limbs", "waving", "face_down", "person_nearby", "blood_spread"):
+        assert stored[name]["value"] == signs[name]["value"], name
+    assert stored["changes"][0]["from"] == "open"
+    assert "pulse" not in stored

@@ -146,7 +146,8 @@ TAKES = {take.name: take for take in (
     Take("red-props", 30, LIE + "Red objects next to you, such as a bag, bottle or towel; no fake blood.",
          checks=(Check("no_blood", "visible_blood", start_s=3),)),
     Take("fall-to-mat", 35, STAND + "A thick mat next to you. When the voice says now, go down onto the mat "
-         "quickly, knees first, and stay lying. Do not throw yourself down.", cues=((15, "Now"),),
+         "in one continuous movement, knees then hands then onto your side, lying within two seconds, and "
+         "stay lying. Do not pause on your knees, and do not throw yourself down.", cues=((15, "Now"),),
          checks=(Check("value", "fall", "seen", 22), Check("absent", "fall", "seen", 0, 14))),
     Take("lie-down-slowly", 40, STAND + "When the voice says lie down, lie down on the floor slowly.",
          cues=((15, "Lie down slowly"),), checks=(Check("absent", "fall", "seen"),)),

@@ -143,7 +143,7 @@ class PublisherSettings:
     max_backoff_s: float = 5.0
     mock_log: str = "artifacts/mock_{camera_id}.jsonl"
     send_signs: bool = False            # needs the backend change in cv/CONTRACT_PROPOSAL.md
-    send_history: bool = False          # also the history and position signs (not accepted yet)
+    send_history: bool = True           # also the history and position signs (accepted since backend PR #12)
 
 
 @dataclass(frozen=True)
