@@ -1,16 +1,16 @@
-"""Response check started by the responder's voice (``signs.voice_cue_mic``).
+"""Response check started by sound activity at a microphone (``signs.voice_cue_mic``).
 
-When the responder says something loud, like "Can you hear me? Raise your hand",
-the microphone hears it and the pipeline marks a spoken command, exactly as
-pressing c does; nobody presses anything. It hears loudness, not words: sound
-``voice_cue_ratio`` times above the room's background level, and above
-``voice_cue_min_rms``, for ``voice_cue_min_s`` starts one check, and no new one
-starts until that check's ``command_window_s`` is over. The phone on the
-responder's chest hears its wearer far louder than people across the room, so
-use its microphone (``iPhone`` matches a Continuity microphone whatever the
-phone is called).
+This is a loudness detector, not speech recognition: it never reads words.
+Sound ``voice_cue_ratio`` times above the room's background level, and above
+``voice_cue_min_rms``, for ``voice_cue_min_s`` marks a spoken command exactly
+as pressing c does, and no new one starts until that check's
+``command_window_s`` is over. So the responder calling out "Can you hear me?
+Raise your hand" starts it, and so does any other loud sound (a shout, a clap,
+a loud narrator). The phone on a responder's chest hears its wearer far louder
+than people across the room (``iPhone`` matches a Continuity microphone
+whatever the phone is called); the fixed camera uses the C922's own microphone.
 
-    python -m cv.voice_cue --mic iPhone     # level meter: speak and see when a check would start
+    python -m cv.voice_cue --mic C922       # level meter: make a sound and see when a check would start
 """
 
 from __future__ import annotations
@@ -29,12 +29,12 @@ from cv.settings import CONFIG_DIR, SignsSettings, load_settings
 log = logging.getLogger(__name__)
 
 BLOCK_S = 0.05
-GAP_S = 0.25            # quieter than this long between words still counts as one utterance
+GAP_S = 0.25            # quieter than this long between loud blocks still counts as one sound
 
 
 @dataclass
-class LoudSpeech:
-    """Loudness per block in, True once per utterance that should start a check."""
+class LoudSound:
+    """Loudness per block in, True once per loud sound that should start a check."""
 
     ratio: float
     min_rms: float
@@ -56,7 +56,7 @@ class LoudSpeech:
             if self.loud_since is None or t - self.last_loud > GAP_S:
                 self.loud_since = t
             self.last_loud = t
-            rate = 0.002                            # long speech must not become the background
+            rate = 0.002                            # a long loud sound must not become the background
         else:
             rate = 0.2 if rms < self.background else 0.01
         self.background += (rms - self.background) * rate
@@ -93,7 +93,7 @@ class VoiceCue:
     def __init__(self, settings: SignsSettings, device: int, name: str):
         self.name = name
         self.device = device
-        self.detector = LoudSpeech(settings.voice_cue_ratio, settings.voice_cue_min_rms,
+        self.detector = LoudSound(settings.voice_cue_ratio, settings.voice_cue_min_rms,
                                    settings.voice_cue_min_s, settings.command_window_s)
         self._pending = 0
         self._lock = threading.Lock()
@@ -135,7 +135,8 @@ class VoiceCue:
                                                blocksize=int(rate * BLOCK_S), dtype="float32",
                                                callback=on_block)
         self._stream.start()
-        log.info("Voice cue on %s: loud speech starts the response check", self.name)
+        log.info("Voice cue on %s: loud sound starts the response check (loudness, not speech recognition)",
+                 self.name)
 
     def take(self) -> bool:
         with self._lock:

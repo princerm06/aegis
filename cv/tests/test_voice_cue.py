@@ -1,16 +1,16 @@
 from cv.settings import SignsSettings, load_settings, CONFIG_DIR
-from cv.voice_cue import BLOCK_S, LoudSpeech, find_microphone
+from cv.voice_cue import BLOCK_S, LoudSound, find_microphone
 
 QUIET = 0.003           # measured: quiet room on the iPhone microphone
 SHOUT = 0.15
 
 
-def detector() -> LoudSpeech:
+def detector() -> LoudSound:
     s = SignsSettings()
-    return LoudSpeech(s.voice_cue_ratio, s.voice_cue_min_rms, s.voice_cue_min_s, s.command_window_s)
+    return LoudSound(s.voice_cue_ratio, s.voice_cue_min_rms, s.voice_cue_min_s, s.command_window_s)
 
 
-def play(cue: LoudSpeech, segments: list[tuple[float, float]], start: float = 0.0) -> list[float]:
+def play(cue: LoudSound, segments: list[tuple[float, float]], start: float = 0.0) -> list[float]:
     """Feed (seconds, level) segments in 50 ms blocks; times at which a check starts."""
     t, starts = start, []
     for seconds, level in segments:

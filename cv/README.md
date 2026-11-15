@@ -236,16 +236,18 @@ one track, so a person seen by both cameras would show as two detections.
 cards still show eyes, blood and posture up close) without a second marker on
 the map.
 
-**Response check by voice** (`cv/voice_cue.py`, `signs.voice_cue_mic: iPhone`
-in both demo configs): nobody presses anything. When the responder says
-something loud, like "Can you hear me? Raise your hand!", the phone's
-microphone on their chest hears it and both cameras start the response check,
-as key **c** does. It hears loudness, not words: 6 times the room's background
-and at least 0.05 of full scale for 0.4 s (quiet room 0.003, noises up to
-0.03), then nothing new until the 8 s check is over. A loud narrator next to
-the phone starts it too. Without the phone it logs that and **c** still works.
-`python -m cv.voice_cue --mic iPhone` is a level meter to check the threshold
-against a real voice; not yet checked against one.
+**Response check by sound activity** (`cv/voice_cue.py`; `signs.voice_cue_mic`
+is `C922` in `demo.yaml`, `iPhone` in `bodycam.yaml`): nobody presses anything.
+This is a loudness detector, not speech recognition: it never reads words.
+When the responder calls out "Can you hear me? Raise your hand!", the
+microphone hears a loud sound and the camera starts the response check, as
+key **c** does. The trigger is 6 times the room's background and at least 0.05
+of full scale for 0.4 s (quiet room 0.003, noises up to 0.03), then nothing new
+until the 8 s check is over. Any loud sound starts it too (a shout, a clap, a
+loud narrator). Without the microphone it logs that and **c** still works.
+`python -m cv.voice_cue --mic C922` is a level meter to check the threshold.
+Checked on the C922 with speech played from the Mac speaker: the first phrase
+started the check, a second one inside the 8 s window did not start another.
 
 The rest of this section is what `cv.demo` runs for the fixed camera.
 
@@ -320,7 +322,7 @@ The phone sends `"zone_id": "zone-b"` instead of `position`. Registration is
   unique per report and reused only for a retry of the same report.
 - **States:**
   - `visible`: detected within the last 0.5 s (`occlusion_grace_s`, which
-    absorbs one-frame misses).
+    absorbs one-frame misses; `demo.yaml` uses 1.5 s, see its comment).
   - `occluded`: not detected since, but the track is alive.
   - `lost`: not detected for 30 s (`lost_after_s`). Sent once, then the ID is
     retired.

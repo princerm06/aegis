@@ -82,7 +82,7 @@ class SignsSettings:
     still_after_s: float = 2.0          # no movement for this long = still
     command_window_s: float = 8.0       # time to respond after a marked command
     response_threshold: float = 0.15    # limb displacement / body size that counts as a response
-    voice_cue_mic: str = ""             # microphone whose loud speech marks the command (cv/voice_cue.py); "" = key c only
+    voice_cue_mic: str = ""             # microphone whose loud sound marks the command (cv/voice_cue.py); "" = key c only
     voice_cue_ratio: float = 6.0        # this many times the room's background level ...
     voice_cue_min_rms: float = 0.05     # ... and at least this (full scale 1; quiet room 0.003, noises up to 0.03)
     voice_cue_min_s: float = 0.4        # for this long
