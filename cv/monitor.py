@@ -227,8 +227,6 @@ def card_for(signs: dict, context: dict | None = None) -> Card:
     breath = None
     if breathing["value"] == "motion_detected":
         breath = Gauge("BREATHING", _marked(f"{breathing['rate_bpm']:.0f}", breathing), unit="/min")
-    elif breathing["value"] == "no_motion_detected":
-        breath = Gauge("BREATHING", _marked("NO MOTION", breathing), "attention")
     pulse = _pulse(signs)
     measuring = [name for name, busy in (
         ("breathing", breath is None and movement["value"] == "still"
@@ -285,7 +283,6 @@ def _ago(seconds: float) -> str:
 _CHANGE_NOTES = {   # (sign, new value): text with {ago} and {was}; only changes toward a notable value
     ("eyes", "closed"): "Eyes closed {ago} ago, were {was}",
     ("response", "no_response"): "No response now, responded before",
-    ("breathing", "no_motion_detected"): "No chest motion for {ago}",
     ("visible_blood", "detected"): "Blood first seen {ago} ago",
     ("posture", "lying"): "Lying for {ago}, was {was}",
 }
