@@ -10,6 +10,7 @@ a fine-tuned model can replace it later with ``method: model``.
 
 from __future__ import annotations
 
+import math
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -113,8 +114,10 @@ class BloodEstimator:
         if ratio >= settings.blood_spread_ratio:
             return {**result, "value": "growing", "confidence": round(min(0.8, 0.4 + 0.4 * (ratio - 1)), 2), **change}
         if ratio <= 1 / settings.blood_spread_ratio:
-            return {**result, "value": "shrinking", "confidence": round(min(0.8, 0.4 + 0.4 * (1 / ratio - 1)), 2),
-                    **change}
+            # late == 0 means the red area is gone (ratio 0); 1/ratio would crash.
+            shrink = math.inf if ratio <= 0 else (1 / ratio - 1)
+            return {**result, "value": "shrinking",
+                    "confidence": round(min(0.8, 0.4 + 0.4 * shrink), 2), **change}
         return {**result, "value": "stable", "confidence": 0.5, **change}
 
     def value(self, state: BloodState, t: float) -> dict:

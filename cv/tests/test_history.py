@@ -148,6 +148,20 @@ def test_a_growing_red_area_on_the_body_is_spreading_and_a_constant_one_is_stabl
     assert estimator.spread(state, 30.0, detected=False)["value"] == "not_testable"   # no blood seen
 
 
+def test_a_red_area_that_shrinks_to_nothing_is_shrinking_not_a_crash():
+    estimator, state = BloodEstimator(SETTINGS), BloodState()
+    for i, t in enumerate(np.arange(0, 31, 1 / 3)):
+        half = max(0.0, 20 * (1 - t / 20))                  # red area gone by ~20 s
+        if half > 0:
+            image = body_image((int(320 - half), int(230 - half), int(320 + half), int(230 + half)))
+        else:
+            image = body_image((0, 0, 0, 0))                 # no red left in the crop
+            image[:] = (40, 40, 40)
+        estimator.update(state, image, BBOX, KEYPOINTS, CONF, t)
+    out = estimator.spread(state, 30.0, detected=True)
+    assert out["value"] == "shrinking" and out["change_pct"] <= -100
+
+
 def test_a_real_snapshot_fits_the_proposed_backend_models_and_says_nothing_clinical():
     import re
 
