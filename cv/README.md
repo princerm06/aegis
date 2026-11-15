@@ -343,9 +343,9 @@ switches to the debug view with FPS, track states and publisher counters):
   **eyes** (`OPEN` / `CLOSED`), **response** to a spoken command (`YES` /
   `NO`, `NOT ASKED` before the first command), **blood** (`NOT SEEN` or the
   region, `HEAD +1`; the region is also outlined in amber on the body).
-  **Breathing** (`16 /min`, or `NO MOTION` when no chest motion is seen) and
-  **pulse** (`72 /min`) only appear once the camera has a reading; there is
-  never a dash for them. While either is being measured one grey line says
+  **Breathing** (`16 /min`) and **pulse** (`72 /min`) only appear once the
+  camera has a rate; there is never a dash for them, and no "no chest
+  motion" (it is not evidence of no breathing, see the breathing results). While either is being measured one grey line says
   "Measuring breathing and pulse, keep still".
 - **The ring is the state:** white = observed; amber = notable observation
   (no chest motion, eyes closed, no response, blood seen); dashed grey = the
@@ -538,6 +538,15 @@ are, and the safe behavior holds: grey "cannot tell" rather than a wrong
 number. Any change to the breathing method must improve the paced takes
 (known pace) without adding rates on the background patch, the breath-hold
 windows or these clips.
+
+Rechecked Nov 14 evening, every second of every clip:
+- `no_motion_detected` is not evidence of held breath. On the outdoor clips
+  it came in 41-75% of breathing windows at 4-13 m and 25-62% of held ones.
+  So the card and the backend only get breathing as a rate.
+- A lower SNR threshold finds more breathing (lying indoors: 3% of windows
+  at 40, 15% at 20) and gave no rate in the 50 held-breath windows, but the
+  background patch beside the person also passed at 20 in 7% of windows (21%
+  for the chest; 2 clips had room for a patch). The threshold stays at 40.
 
 **Soak test.** For a long run with memory tracking, use a zones config so
 reports are actually sent. The summary includes peak memory every 10 minutes;

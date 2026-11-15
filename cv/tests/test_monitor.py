@@ -37,10 +37,10 @@ def values(card):
 
 def test_findings_are_amber_and_each_gauge_has_one_short_value():
     card = card_for(FINDINGS)
-    assert values(card) == ["STILL 1:35", "NO MOTION?", "CLOSED", "NO", "TORSO +1"]   # 0.45 gets "?"
-    assert [g.label for g in card.gauges] == ["BREATHING", "EYES", "RESPONSE", "BLOOD"]   # no pulse estimate
+    assert values(card) == ["STILL 1:35", "CLOSED", "NO", "TORSO +1"]
+    assert [g.label for g in card.gauges] == ["EYES", "RESPONSE", "BLOOD"]   # no chest motion is not shown
     assert {g.state for g in card.gauges} == {"attention"}
-    assert card.pulse is None and card.movement.state == "observed"
+    assert card.breathing is card.pulse is None and card.movement.state == "observed"
     assert card.eyes.icon == "closed" and card.blood.icon == "filled" and card.hint == ""
 
 

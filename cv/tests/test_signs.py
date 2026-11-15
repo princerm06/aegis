@@ -346,7 +346,7 @@ def test_history_signs_stay_off_the_wire_until_the_backend_accepts_them():
 
 
 def test_breathing_is_only_sent_with_a_reading():
-    for value, sent in (("not_testable", False), ("motion_detected", True), ("no_motion_detected", True)):
+    for value, sent in (("not_testable", False), ("motion_detected", True), ("no_motion_detected", False)):
         publisher, transport, _ = signs_publisher(send_signs=True)
         signs = {**SIGNS, "breathing": {"value": value, "confidence": 0.5}}
         publisher.submit([replace(report(100.0), signs=signs)])

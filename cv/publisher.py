@@ -196,8 +196,10 @@ class Publisher:
 
     def _wire_signs(self, signs: dict) -> dict:
         dropped = DISPLAY_ONLY_SIGNS if self.settings.send_history else HISTORY_SIGNS + DISPLAY_ONLY_SIGNS
-        if signs.get("breathing", {}).get("value") == "not_testable":
-            dropped = (*dropped, "breathing")     # optional in the contract: no reading, nothing to show
+        if signs.get("breathing", {}).get("value") != "motion_detected":
+            # Optional in the contract. No chest motion is not evidence of no breathing: on the
+            # RespView clips it came as often while breathing (41-75%) as during held breath.
+            dropped = (*dropped, "breathing")
         return {name: sign for name, sign in signs.items() if name not in dropped}
 
     def _signs_key(self, report: TrackReport) -> tuple:
