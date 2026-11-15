@@ -1,7 +1,7 @@
 "use client";
 
 import { SEVERITY_META, ageSeconds, responderName, shortId } from "@/lib/format";
-import type { Feed, FeedStatus } from "@/lib/feeds";
+import { buildingStreamUrl, type Feed, type FeedStatus } from "@/lib/feeds";
 import type { Responder, SimulationProposal, SimulationState } from "@/lib/types";
 import { VideoFeed } from "./VideoFeed";
 
@@ -77,6 +77,7 @@ export function CameraView({ feed, state, proposal, now, primary, onStatus }: Vi
       <div className="relative h-full w-full">
         <VideoFeed
           {...common}
+          autoUrl={buildingStreamUrl(state.cameras)}
           overlay={
             <div className={`mono bg-gradient-to-t from-black/90 to-transparent px-1.5 pb-1 pt-3 text-white/80 ${primary ? "text-[11px]" : "text-[9.5px]"}`}>
               CV {tracked} tracked · detection only

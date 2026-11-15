@@ -9,7 +9,7 @@
     "lint": "next lint",
     "smoke": "node scripts/smoke.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test scripts/test-route-invalidation.mjs scripts/test-push-to-talk.mjs && vitest run",
+    "test": "node --experimental-strip-types --no-warnings --test scripts/test-route-invalidation.mjs scripts/test-push-to-talk.mjs scripts/test-building-stream.mjs scripts/test-mjpeg.mjs && vitest run",
     "test:unit": "vitest run",
     "e2e": "node scripts/e2e.mjs"
   },

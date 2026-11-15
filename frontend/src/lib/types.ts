@@ -139,6 +139,8 @@ export interface CameraRecord {
   zones: Record<string, Position> | null;
   registered_by: string;
   registered_at: ISODate;
+  /** Where the camera serves its live view (MJPEG); null or absent when it serves none. */
+  stream_url?: string | null;
 }
 
 export interface CameraProvenance {
