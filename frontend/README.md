@@ -75,6 +75,13 @@ The operator at the command center watches the scene and relays guidance to fire
   MP4/WebM as video). For bodycams, "hear via" picks an audio input so command can listen.
 - **Voice link**: the operator's mic plays out of a chosen output (e.g. a Bluetooth speaker on the
   firefighter, paired to this computer). Muted unless the talk button/Space is held.
+- **Talk to <responder>** (Comms): two-way voice with the responder's phone, browser to browser
+  (WebRTC; the backend only relays the call setup). The responder opens `/responder` on their
+  phone once, taps **Join** and keeps the page open; it answers by itself and keeps the screen
+  awake where Safari allows. Phones need HTTPS for the microphone, e.g. the host's Tailscale
+  address via `tailscale serve --bg http://127.0.0.1:3000`; set `NEXT_PUBLIC_AEGIS_PHONE_ORIGIN`
+  to that address before building to show the full link in Comms. The operator's browser needs a
+  secure context too (`http://localhost:3000` on the host, or the same HTTPS address).
 - Quick commands and directions use speech synthesis on the **system default output**.
 - Directions are map-relative (north = up); responder heading isn't tracked.
 
