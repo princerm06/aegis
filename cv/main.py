@@ -185,6 +185,13 @@ def run(args: argparse.Namespace) -> int:
         signs.prepare()
         log.info("Observing signs%s; press c in the window right after giving a spoken command",
                  " and sending them" if settings.publisher.send_signs else " (shown only, not sent)")
+    voice = None
+    if signs is not None and not args.source:
+        from cv.voice_cue import VoiceCue
+
+        voice = VoiceCue.open(settings.signs)
+        if voice is not None:
+            voice.start()
 
     publisher = None
     if base_calibration is not None or zone_map is not None:
@@ -313,6 +320,8 @@ def run(args: argparse.Namespace) -> int:
 
             if stream is not None and stream.take_commands():
                 mark_command(now, "dashboard")
+            if voice is not None and voice.take():
+                mark_command(now, "voice")
             showing = not args.no_display or (stream is not None and stream.watched)
             if showing and frame is not None:
                 canvas = draw(frame.image, tracks, tracker, calibration, zone_map, camera, publisher,
@@ -332,6 +341,8 @@ def run(args: argparse.Namespace) -> int:
                     log.info("Room changed to %s", room)
     finally:
         camera.release()
+        if voice is not None:
+            voice.stop()
         if publisher is not None:
             publisher.stop()
         if _marks is not None:
