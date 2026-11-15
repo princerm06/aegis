@@ -3,6 +3,7 @@
 // non-destructive regression pass over the Command Center, Voice and Neural panels.
 //
 // Run once per backend mode, matching how the backend was started:
+//   Run: node scripts/e2e-ems.mjs
 //   EXPECT=disabled     (default backend; AEGIS_EMS_ADVISORY_ENABLED unset)
 //   EXPECT=enabled      (AEGIS_EMS_ADVISORY_ENABLED=true + `uv sync --group ems`)
 //   EXPECT=unavailable  (enabled, but AEGIS_EMS_MODEL_DIR points at a missing checkpoint)
