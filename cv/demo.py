@@ -23,6 +23,7 @@ but sends no detections, so the same people do not appear twice on the map.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import signal
 import subprocess
 import sys
@@ -48,6 +49,19 @@ class Feed:
 
 # About 10 KB a frame: on the venue hotspot 640 px frames (22 KB) backed up at 5 fps.
 LAN_STREAM = ["--stream-fps", "10", "--stream-quality", "45", "--stream-width", "480"]
+TAILSCALE_STREAM = ["--stream-fps", "12", "--stream-quality", "75", "--stream-width", "960"]
+TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")
+
+
+def stream_preset(stream_host: str) -> list[str]:
+    """Stream settings for the network the tiles are served on: full on this Mac, sharper over Tailscale."""
+    if stream_host == "127.0.0.1":
+        return []
+    try:
+        on_tailscale = ipaddress.ip_address(stream_host) in TAILSCALE_NET
+    except ValueError:
+        on_tailscale = False
+    return TAILSCALE_STREAM if on_tailscale else LAN_STREAM
 
 FIXED = Feed("Fixed camera", "demo.yaml", 8090, "BUILDING CAM")
 BODYCAM = Feed("Body cam", "bodycam.yaml", 8091, "ALPHA · BODYCAM")
@@ -69,8 +83,7 @@ def command(feed: Feed, room: str, display: bool, backend_url: str | None = None
             stream_host: str = "127.0.0.1", view_only: bool = False) -> list[str]:
     argv = [sys.executable, "-m", "cv.main", "--config", str(CONFIG_DIR / feed.config),
             "--room", room, "--send-signs", "--stream-port", str(feed.port), "--stream-host", stream_host]
-    if stream_host != "127.0.0.1":
-        argv += LAN_STREAM
+    argv += stream_preset(stream_host)
     if backend_url:
         argv += ["--backend-url", backend_url]
     if view_only:
