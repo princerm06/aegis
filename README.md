@@ -50,6 +50,10 @@ explanations, and `docs/RL_RESEARCH.md` for isolated research boundaries.
 
 ## Intelligence enhancements
 
+For the optional, disabled-by-default model genuinely trained on historical NYC
+EMS dispatch records, see [the EMS research pipeline and benchmark](ml/ems/README.md).
+Its read-only simulation advisory is separate from indoor routing and dispatch authority.
+
 The demo's default allocation and approval workflow remains unchanged. Temporal
 uncertainty reports distinguish camera detections, zone estimates, human-known
 locations, and unknown positions without inventing medical assessments. Optional
