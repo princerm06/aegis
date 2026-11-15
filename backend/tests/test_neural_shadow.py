@@ -29,20 +29,22 @@ import numpy as np
 import pytest
 torch = pytest.importorskip("torch", reason="Optional PyTorch dependency required for neural shadow tests")
 
-def _checkpoints_available() -> bool:
-    return (DEFAULT_WEIGHTS_DIR / "mlp_seed42.pt").is_file() and (DEFAULT_WEIGHTS_DIR / "gnn_seed42.pt").is_file()
-
-checkpoints_required = pytest.mark.skipif(
-    not _checkpoints_available(),
-    reason="Neural shadow checkpoints not provisioned in experiments/neural_assignment/weights/",
-)
-
 from backend.app.intelligence.neural_shadow import (
     DEFAULT_WEIGHTS_DIR,
     NeuralComparisonReport,
     NeuralShadowService,
     get_file_sha256,
     is_neural_shadow_enabled,
+)
+
+
+def _checkpoints_available() -> bool:
+    return (DEFAULT_WEIGHTS_DIR / "mlp_seed42.pt").is_file() and (DEFAULT_WEIGHTS_DIR / "gnn_seed42.pt").is_file()
+
+
+checkpoints_required = pytest.mark.skipif(
+    not _checkpoints_available(),
+    reason="Neural shadow checkpoints not provisioned in experiments/neural_assignment/weights/",
 )
 from backend.app.main import create_app
 from backend.app.models import MedicalAssessment, Position
