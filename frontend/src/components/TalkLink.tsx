@@ -259,21 +259,21 @@ export function TalkLink({ responderId, name, onLog }: { responderId: string; na
   const link = enrollment ? phoneLink(origin ?? window.location.origin, enrollment) : null;
 
   return (
-    <div className="rounded border border-line bg-panel-2 p-2" data-testid="talk-link" data-access={access} data-phase={phase} data-online={String(online)}>
+    <div
+      className="rounded border border-line bg-panel-2 px-2 py-1.5"
+      title="Responder talk link: a live two-way call with the responder's phone. Not Ask AEGIS, which only answers questions."
+      data-testid="talk-link" data-access={access} data-phase={phase} data-online={String(online)}>
       <audio ref={audioRef} autoPlay playsInline hidden />
-      <p className="label mb-1 flex items-center gap-1.5">
-        <span>📞 Responder talk link</span>
-        <span className="mono text-[9px] font-normal normal-case tracking-normal text-faint">two-way call · not Ask AEGIS</span>
-      </p>
-
       {access === "unconfigured" ? (
-        <p className="text-[10.5px] text-muted" data-testid="talk-unconfigured">
-          Talk link is not configured on this host (the host needs AEGIS_TALK_OPERATOR_TOKEN).
+        <p className="text-[10.5px] text-muted" data-testid="talk-unconfigured" title="The host needs AEGIS_TALK_OPERATOR_TOKEN set.">
+          📞 Talk link is not configured on this host
         </p>
       ) : access === "signin" ? (
-        <form onSubmit={submitSecret} className="flex flex-col gap-1" data-testid="talk-signin">
-          <span className="text-[10.5px] text-warn">Talk link sign-in required — enter the operator secret (kept for this tab only).</span>
-          <div className="flex gap-1">
+        <form onSubmit={submitSecret} className="flex flex-wrap items-center gap-1" data-testid="talk-signin">
+          <span className="shrink-0 text-[10.5px]">
+            📞 <span className="text-muted">Talk link (two-way call)</span> · <span className="text-warn">sign-in required</span>
+          </span>
+          <div className="flex min-w-[10rem] flex-1 gap-1">
             <input
               type="password"
               value={secretInput}
@@ -282,22 +282,23 @@ export function TalkLink({ responderId, name, onLog }: { responderId: string; na
               spellCheck={false}
               aria-label="Talk link operator secret"
               data-testid="talk-secret"
-              className="min-w-0 flex-1 rounded border border-line-strong bg-bg px-2 py-1 text-[11px] outline-none focus:border-accent"
-              placeholder="Operator secret"
+              className="min-w-0 flex-1 rounded border border-line-strong bg-bg px-2 py-0.5 text-[11px] outline-none focus:border-accent"
+              placeholder="Operator secret (this tab only)"
             />
-            <button type="submit" className="rounded border border-accent/60 px-2 py-1 text-[11px] font-semibold text-accent hover:bg-accent/10" data-testid="talk-signin-submit">
+            <button type="submit" className="rounded border border-accent/60 px-2 py-0.5 text-[11px] font-semibold text-accent hover:bg-accent/10" data-testid="talk-signin-submit">
               Sign in
             </button>
           </div>
         </form>
       ) : phase === "idle" ? (
         <div className="flex flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <button
               onClick={start}
               disabled={!online || access !== "ok"}
               data-testid="talk-start"
-              className="whitespace-nowrap rounded border border-accent/60 px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:border-line-strong disabled:text-faint"
+              aria-label={`Two-way call with ${name}'s phone (not Ask AEGIS)`}
+              className="whitespace-nowrap rounded border border-accent/60 px-2 py-0.5 text-[11px] font-semibold text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:border-line-strong disabled:text-faint"
             >
               📞 Talk to {name}
             </button>
@@ -310,12 +311,12 @@ export function TalkLink({ responderId, name, onLog }: { responderId: string; na
                 sign out phone
               </button>
             )}
+            {online === false && access === "ok" && !link && (
+              <button onClick={getPhoneLink} data-testid="talk-enroll" className="ml-auto text-[10.5px] text-accent underline">
+                Get phone link
+              </button>
+            )}
           </div>
-          {online === false && access === "ok" && !link && (
-            <button onClick={getPhoneLink} data-testid="talk-enroll" className="self-start text-[10.5px] text-accent underline">
-              Get {name}&apos;s phone link
-            </button>
-          )}
           {link && (
             <div className="rounded border border-line bg-bg p-1.5 text-[10px] leading-snug" data-testid="talk-phone-link">
               <p className="text-muted">Open on {name}&apos;s phone, then tap Join. Treat it like a password — it&apos;s hidden once the phone connects.</p>

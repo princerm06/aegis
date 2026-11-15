@@ -111,7 +111,6 @@ export function CommsPanel({ state, proposal, fighterId, onStatus, placing, onPl
           </button>
         </div>
 
-        <TalkLink responderId={f.id} name={name} onLog={addLog} />
         <PushToTalk name={name} onLog={addLog} />
 
         {/* quick commands */}
@@ -132,6 +131,9 @@ export function CommsPanel({ state, proposal, fighterId, onStatus, placing, onPl
           </div>
           <CustomSay onSay={speak} />
         </div>
+
+        {/* Two-way call with the responder's phone; below the existing controls so they never move. */}
+        <TalkLink responderId={f.id} name={name} onLog={addLog} />
 
         {/* navigation */}
         <div className="rounded border border-line bg-panel-2">
