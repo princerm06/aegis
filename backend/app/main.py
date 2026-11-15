@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from backend.app.api.ems_dispatch import router as ems_dispatch_router
-from backend.app.api.talk import TalkRelay, ice_config
+from backend.app.api.talk import TalkRelay, ice_config, talk_auth_from_env
 from backend.app.api.talk import router as talk_router
 from backend.app.api.routes import router
 from backend.app.services.ems_dispatch import DEFAULT_CHECKPOINT, EMSDispatchAdvisory
@@ -28,6 +28,7 @@ def create_app() -> FastAPI:
     application.include_router(ems_dispatch_router)
     application.state.talk_relay = TalkRelay()
     application.state.talk_ice = ice_config()
+    application.state.talk_auth = talk_auth_from_env()
     application.include_router(talk_router)
     return application
 
