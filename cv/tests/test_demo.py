@@ -31,7 +31,13 @@ def test_each_camera_sends_signs_and_serves_its_own_tile():
 
 def test_shared_backend_and_a_view_only_body_cam():
     shared = command(FIXED, "room-2", True, "http://192.168.137.1:8000", "0.0.0.0")
-    assert shared[-4:] == ["--stream-host", "0.0.0.0", "--backend-url", "http://192.168.137.1:8000"]
+    assert shared[-2:] == ["--backend-url", "http://192.168.137.1:8000"]
+    assert ["--stream-host", "0.0.0.0"] == shared[shared.index("--stream-host"):][:2]
     assert "--mock-backend" not in shared
+    assert ["--stream-width", "480"] == shared[shared.index("--stream-width"):][:2]   # light stream for other laptops
+    assert "--stream-width" not in command(FIXED, "room-2", True)
+    tailnet = command(FIXED, "room-2", True, "http://100.98.25.85:8000", "100.87.248.51")
+    assert ["--stream-width", "960"] == tailnet[tailnet.index("--stream-width"):][:2]  # sharper over Tailscale
+    assert ["--stream-width", "480"] == command(FIXED, "room-2", True, None, "10.25.20.68")[-2:]
     view = command(BODYCAM, "room-2", True, "http://192.168.137.1:8000", view_only=True)
     assert view[-2:] == ["--mock-backend", "--quiet-mock"]          # draws and streams, sends nothing

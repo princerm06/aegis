@@ -139,6 +139,13 @@ def test_dark_stage_blood_is_detected():
     assert result["value"] == "detected"
 
 
+def test_bright_stage_makeup_on_an_arm_is_detected():
+    # Live C922 smear: BGR ~ (37, 54, 141), G/R ~ 0.38 — missed by the old 0.35 cut.
+    result = blood_value(body_image((250, 280, 310, 360), color=(37, 54, 141)))
+    assert result["value"] == "detected"
+    assert "left_arm" in result.get("regions", []) or "right_arm" in result.get("regions", []) or "torso" in result.get("regions", [])
+
+
 def test_blood_needs_two_checks():
     assert blood_value(body_image((300, 200, 340, 250)), checks=1)["value"] == "not_testable"
 
@@ -250,9 +257,10 @@ def test_turned_heads_use_the_higher_eye_score_and_profiles_are_not_testable():
     assert head_yaw_deg(np.eye(4)) == pytest.approx(0.0)
 
 
-def test_small_head_wound_counts_with_the_head_threshold():
+def test_head_needs_a_clearer_blot_than_a_limb():
+    # Head disc covers lips and warm shadows; limbs use the lower body threshold.
     estimator = BloodEstimator(SETTINGS)
-    assert estimator._min_fraction("head") == SETTINGS.blood_min_fraction_head < SETTINGS.blood_min_fraction
+    assert estimator._min_fraction("head") == SETTINGS.blood_min_fraction_head > SETTINGS.blood_min_fraction
     assert estimator._min_fraction("torso") == SETTINGS.blood_min_fraction
 
 

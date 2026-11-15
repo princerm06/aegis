@@ -22,6 +22,7 @@ class Detection:
     confidence: float
     keypoints: np.ndarray | None = None      # (17, 2) COCO keypoints in pixels
     keypoint_conf: np.ndarray | None = None  # (17,)
+    appearance: np.ndarray | None = None     # torso colour histogram (cv.appearance), set by the caller
 
 
 def pick_device(requested: str) -> str:

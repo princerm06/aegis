@@ -1,15 +1,17 @@
-"""Visible-blood cue by color: deep red pixels inside body regions.
+"""Visible-blood cue by color: saturated red pixels inside body regions.
 
-Stage blood is a deep red with little green or blue, unlike skin and lips
-(see ``red_mask``). Each check measures the red share of every body region (from the
-pose keypoints); a region counts when the share and pixel count pass the
-thresholds in most checks of the window. Red clothing or props will trigger it,
-so actors should not wear red. ``method: color`` says which detector made the call;
-a fine-tuned model can replace it later with ``method: model``.
+Stage blood and makeup are a saturated red (HSV sat high, green and blue well
+below red); skin, lips and pink clothes are either less saturated, greener/bluer,
+or darker (see ``red_mask``). Each check measures the red share of every body
+region (from the pose keypoints); a region counts when the share and pixel count
+pass the thresholds in most checks of the window. Red clothing or props will
+trigger it, so actors should not wear red. ``method: color`` says which detector
+made the call; a fine-tuned model can replace it later with ``method: model``.
 """
 
 from __future__ import annotations
 
+import math
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -19,21 +21,22 @@ from cv.signs.body import body_scale, region_masks
 
 
 def red_mask(image_bgr, settings) -> np.ndarray:
-    """Blood-red pixels: red hue, and both green and blue far below red.
+    """Blood-red pixels: red hue, saturated, bright enough, green/blue below red.
 
-    The green/blue ratio is what separates stage blood from skin and lips: a
-    webcam in dim warm light renders skin as saturated pink (G/R and B/R around
-    0.45), while stage blood keeps G/R and B/R under about 0.3. The hue range is
-    narrow on the magenta side so pink clothing and lenses do not count.
+    Stage makeup under a webcam often has G/R or B/R around 0.4-0.55 (the old
+    0.35 cut missed a forearm smear). Skin under the same light is greener/bluer
+    (~0.7) or too pale (low saturation). Dark head shadows are red-ish but dim,
+    so ``blood_val_min`` drops them. The hue range stays narrow on the magenta
+    side so pink clothing does not count.
     """
     import cv2
 
     hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
-    hue = hsv[..., 0]
+    hue, sat = hsv[..., 0], hsv[..., 1]
     blue, green, red = (image_bgr[..., i].astype(np.int32) for i in range(3))
     red_hue = (hue <= settings.blood_hue_max) | (hue >= settings.blood_hue_min_wrap)
     deep = np.maximum(green, blue) <= settings.blood_max_gb_ratio * red
-    mask = (red_hue & deep & (red >= settings.blood_val_min)).astype(np.uint8)
+    mask = (red_hue & deep & (red >= settings.blood_val_min) & (sat >= settings.blood_sat_min)).astype(np.uint8)
     return cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)).astype(bool)
 
 
@@ -113,8 +116,10 @@ class BloodEstimator:
         if ratio >= settings.blood_spread_ratio:
             return {**result, "value": "growing", "confidence": round(min(0.8, 0.4 + 0.4 * (ratio - 1)), 2), **change}
         if ratio <= 1 / settings.blood_spread_ratio:
-            return {**result, "value": "shrinking", "confidence": round(min(0.8, 0.4 + 0.4 * (1 / ratio - 1)), 2),
-                    **change}
+            # late == 0 means the red area is gone (ratio 0); 1/ratio would crash.
+            shrink = math.inf if ratio <= 0 else (1 / ratio - 1)
+            return {**result, "value": "shrinking",
+                    "confidence": round(min(0.8, 0.4 + 0.4 * shrink), 2), **change}
         return {**result, "value": "stable", "confidence": 0.5, **change}
 
     def value(self, state: BloodState, t: float) -> dict:

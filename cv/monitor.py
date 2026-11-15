@@ -1,26 +1,34 @@
 """Responder view: the video with one small card attached to each person.
 
 Each tracked person gets a card next to their body, joined to their chest by a
-leader line in the person's color, that follows them. Four round gauges sit in
+leader line in the person's color, that follows them. Round gauges sit in
 fixed places with a fixed icon and label and one short value each, so a
 responder learns once where to look and reads it from across the room:
 
-    [3] LYING                             STILL 1:35      number (matches the dashboard), posture, movement
-     (lungs)   (heart)    (eye)    (hand)    (drop)
-       16        72      CLOSED      NO       HEAD        one value per gauge
+    [3] ROOM 2                                            number (matches the dashboard), room
+     (~wave~)  (heart)    (eye)    (hand)    (drop)
+     16 /min     72      CLOSED      NO       HEAD
     BREATHING PULSE EST.  EYES   RESPONSE   BLOOD
+     (figure)  (clock)  (figure)  (arrow)
+      LYING   1:35 still 1 STILL  1:20 ago
+     POSTURE  MOVEMENT   LIMBS     FALL
 
-The ring is the state: white = observed, amber = notable (no chest motion,
-eyes closed, no response, blood seen), dashed grey = the camera cannot tell or
-nothing was asked yet, cyan = in progress (after a spoken command the ring
-drains while the camera watches for a response). The breathing and pulse
-gauges only appear once the camera has a reading (a breathing rate, no chest
-motion, a pulse estimate); while either is being measured one grey line says
-"Measuring ..., keep still". A trailing "?" marks a low detector confidence.
+The ring is the state: white = observed, amber = notable (eyes closed, no
+response, blood seen, lying, still for 30 s, a limb not moved in the limb
+window, a fall), dashed grey = the camera cannot tell or nothing was asked yet,
+cyan = in progress (after a spoken command the ring drains while the camera
+watches for a response). The breathing gauge appears while a still person's
+chest is measured (cyan countdown) and with a rate, and draws the live chest
+motion in its ring; without a clear rhythm it is not shown, since no chest
+motion is not evidence of no breathing. The pulse gauge appears with an
+estimate; while it is measured a grey line says "Measuring pulse, keep still".
+A trailing "?" marks a low detector confidence.
 Colors mark observations, not severity: nothing here is a diagnosis or a
 priority. The pulse is an estimate from skin colour (signs/pulse.py), shown
-only for a still person with a big enough face and a clear rhythm. Up to two short notes
-under the gauges say what happened ("Fall seen 1:20 ago", "Waving now"). A
+only for a still person with a big enough face and a clear rhythm. With three
+or more people in view the cards drop the second row so they cover fewer faces.
+Up to two short notes under the gauges say what else happened ("Waving now",
+"Face down for 12 s"). A
 person who just left the picture keeps a small "NOT IN VIEW" chip for a few
 seconds, then the top bar lists them with room and time ("3 ROOM 2 2:10").
 
@@ -38,7 +46,7 @@ leader lines and is smoothed so cards glide rather than jump.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from typing import Sequence
 
@@ -47,16 +55,23 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from cv.signs.body import FACE, L_HIP, L_SHOULDER, LIMB_CHAINS, NOSE, R_HIP, R_SHOULDER, TORSO, body_scale
+from cv.signs.breathing import RESAMPLE_HZ
 
 VIEW_H = 720
 MAX_VIEW_W = 1280
 MIN_VIEW_W = 720              # narrower (portrait) pictures get dark side margins for the cards
 TOP_BAR = 30
 BOTTOM_MARGIN = 40            # kept clear for warnings and the disclaimer
-BOX_W, BOX_H = 410, 134       # card without the hint line
+ROW_H = 92                    # one row of gauges
+BOX_W, BOX_H = 410, 134 + ROW_H   # card with two rows of gauges, without note lines
 HINT_H = 20                   # added per line under the gauges
 MAX_LINES = 2
 GAUGE_W = 78
+WAVE_S = 8.0                  # seconds of chest motion drawn in the breathing gauge
+STILL_NOTABLE_S = 30.0        # still this long: the movement gauge turns amber
+TWO_ROWS_UP_TO = 2            # more people in view: cards drop the second row (3 people: faces covered
+                              # in 15-18% of random scenes with two rows, 4% with one)
+LIMB_ORDER = ("left_arm", "right_arm", "left_leg", "right_leg")
 CHIP_W, CHIP_H = 156, 34      # a person just out of view
 BAND_H = 28                   # the operator's priority and plan, on top of the card
 EDGE_W = 5                    # the identity color along the card's left edge
@@ -131,12 +146,17 @@ class Card:
     response: Gauge
     blood: Gauge
     hint: str = ""                    # breathing or pulse being measured
-    notes: tuple[Line, ...] = ()      # what happened: fall, blood spreading, a change, ...
+    notes: tuple[Line, ...] = ()      # what happened: face down, waving, blood spreading, a change, ...
     pulse: Gauge | None = None        # None until the camera has an estimate
+    body: tuple[Gauge, ...] = ()      # second row: posture, movement, limbs, fall
 
     @property
     def gauges(self) -> tuple[Gauge, ...]:
         return tuple(g for g in (self.breathing, self.pulse, self.eyes, self.response, self.blood) if g is not None)
+
+    @property
+    def rows(self) -> tuple[tuple[Gauge, ...], ...]:
+        return (self.gauges, self.body) if self.body else (self.gauges,)
 
     @property
     def lines(self) -> tuple[Line, ...]:
@@ -158,6 +178,7 @@ class Callout:
     task: str = ""                    # the plan for this person, e.g. "responder-002 ON THE WAY"
     waiting: bool = False             # dispatched, not yet acknowledged: blinks
     lit: bool = True                  # blink phase
+    room: str = ""                    # e.g. "ROOM 2" (zones mapping)
 
     @property
     def band(self) -> bool:
@@ -167,7 +188,21 @@ class Callout:
     def size(self) -> tuple[int, int]:
         if not self.in_view:
             return CHIP_W, CHIP_H
-        return BOX_W, BOX_H + HINT_H * len(self.card.lines) + (BAND_H if self.band else 0)
+        height = BOX_H - ROW_H * (2 - len(self.card.rows))
+        return BOX_W, height + HINT_H * len(self.card.lines) + (BAND_H if self.band else 0)
+
+    @property
+    def top(self) -> int:
+        return BAND_H if self.band else 0
+
+    def gauge_slots(self) -> list[tuple[Gauge, float, float]]:
+        """(gauge, left, top) of each gauge in card units: rows centred, a row per ROW_H."""
+        slots = []
+        for row, gauges in enumerate(self.card.rows):
+            start = EDGE_W + 6 + (5 - len(gauges)) * GAUGE_W / 2
+            slots += [(gauge, start + index * GAUGE_W, self.top + 40 + row * ROW_H)
+                      for index, gauge in enumerate(gauges)]
+        return slots
 
 
 @dataclass
@@ -175,6 +210,7 @@ class Scene:
     callouts: list[Callout] = field(default_factory=list)
     hidden: int = 0                   # tracked, long out of view
     out_of_view: list[tuple[int, str, float]] = field(default_factory=list)   # (number, room, seconds ago)
+    traces: dict[str, np.ndarray] = field(default_factory=dict)   # track ID: live chest motion, drawn per frame
 
 
 class LastSeen:
@@ -224,15 +260,17 @@ def card_for(signs: dict, context: dict | None = None) -> Card:
         move = Line("CAMERA MOVING" if moving_camera(movement) else UNKNOWN, "unknown")
 
     breathing = signs.get("breathing", {"value": "not_testable"})
+    remaining = context.get("breathing_remaining_s", 0)
     breath = None
     if breathing["value"] == "motion_detected":
-        breath = Gauge("BREATHING", _marked(f"{breathing['rate_bpm']:.0f}", breathing), unit="/min")
+        breath = Gauge("BREATHING", _marked(f"{breathing['rate_bpm']:.0f}", breathing), unit="/min", icon="wave")
+    elif movement["value"] == "still" and remaining > 0:
+        needed = max(context.get("breathing_needed_s", remaining), 1e-6)
+        breath = Gauge("BREATHING", f"{remaining:.0f} s", "active", icon="wave",
+                       progress=min(1.0, max(0.0, 1 - remaining / needed)))
     pulse = _pulse(signs)
-    measuring = [name for name, busy in (
-        ("breathing", breath is None and movement["value"] == "still"
-         and context.get("breathing_remaining_s", 0) > 0),
-        ("pulse", pulse is None and signs.get("pulse", {}).get("reason") == "measuring")) if busy]
-    hint = f"Measuring {' and '.join(measuring)}, keep still" if measuring else ""
+    measuring = pulse is None and signs.get("pulse", {}).get("reason") == "measuring"
+    hint = "Measuring pulse, keep still" if measuring else ""
 
     eyes = signs.get("eyes", {"value": "not_testable"})
     if eyes["value"] == "closed":
@@ -265,7 +303,52 @@ def card_for(signs: dict, context: dict | None = None) -> Card:
         bleed = Gauge("BLOOD", _marked("NOT SEEN", blood))
     else:
         bleed = Gauge("BLOOD", UNKNOWN, "unknown")
-    return Card(move, breath, eye, respond, bleed, hint, _notes(signs, context), pulse)
+    body = (_posture(signs), _movement(movement), _limbs(signs), _fall(signs, context))
+    return Card(move, breath, eye, respond, bleed, hint, _notes(signs, context), pulse, body)
+
+
+def _posture(signs: dict) -> Gauge:
+    posture = signs.get("posture", {"value": "unknown"})
+    if posture["value"] in ("lying", "sitting", "standing"):
+        return Gauge("POSTURE", _marked(posture["value"].upper(), posture),
+                     "attention" if posture["value"] == "lying" else "observed", icon=posture["value"])
+    return Gauge("POSTURE", UNKNOWN, "unknown", icon="standing")
+
+
+def _movement(movement: dict) -> Gauge:
+    if movement["value"] == "still":
+        seconds = int(movement["still_for_s"])
+        value, unit = (f"{seconds}", "s still") if seconds < 60 else (f"{seconds // 60}:{seconds % 60:02d}", "still")
+        return Gauge("MOVEMENT", _marked(value, movement), "attention" if seconds >= STILL_NOTABLE_S else "observed",
+                     unit=unit, icon="still")
+    if movement["value"] == "moving":
+        return Gauge("MOVEMENT", _marked("MOVING", movement), icon="moving")
+    return Gauge("MOVEMENT", UNKNOWN, "unknown", icon="still")
+
+
+def _limbs(signs: dict) -> Gauge:
+    """Arms and legs that moved in the last limb window; the figure marks the still ones."""
+    limbs = signs.get("limbs", {"value": "not_testable"})
+    if limbs["value"] == "all_moved":
+        return Gauge("LIMBS", _marked("ALL MOVED", limbs), icon="limbs:")
+    if limbs["value"] == "none_moved":
+        return Gauge("LIMBS", _marked("ALL STILL", limbs), "attention", icon="limbs:" + ",".join(LIMB_ORDER))
+    if limbs["value"] == "some_not_moved":
+        still = [name for name in LIMB_ORDER if name in limbs["not_moved"]]
+        return Gauge("LIMBS", _marked(f"{len(still)} STILL", limbs), "attention", icon="limbs:" + ",".join(still))
+    return Gauge("LIMBS", UNKNOWN, "unknown", icon="limbs:?")
+
+
+def _fall(signs: dict, context: dict) -> Gauge:
+    fall = signs.get("fall", {"value": "not_testable"})
+    if fall["value"] == "seen":
+        ago = context.get("fall_ago_s")
+        if ago is None:
+            return Gauge("FALL", _marked("SEEN", fall), "attention", icon="fall")
+        return Gauge("FALL", _marked(_ago(ago), fall), "attention", unit="ago", icon="fall")
+    if fall["value"] == "not_seen":
+        return Gauge("FALL", "NOT SEEN", icon="fall")
+    return Gauge("FALL", UNKNOWN, "unknown", icon="fall")
 
 
 def _pulse(signs: dict) -> Gauge | None:
@@ -289,12 +372,10 @@ _CHANGE_NOTES = {   # (sign, new value): text with {ago} and {was}; only changes
 
 
 def _notes(signs: dict, context: dict) -> tuple[Line, ...]:
-    """What happened, most important first: fall, face down, waving, blood spreading, a change,
-    limbs, then someone with them and walking (observed, not notable)."""
+    """What happened beyond the gauges, most important first: face down, waving, blood spreading,
+    a change, then someone with them and walking (observed, not notable). Falls and still limbs
+    have their own gauges."""
     notes = []
-    if signs.get("fall", {}).get("value") == "seen":
-        ago = context.get("fall_ago_s")
-        notes.append(Line("Fall seen" + (f" {_ago(ago)} ago" if ago is not None else ""), "attention"))
     face_down = signs.get("face_down", {})
     if face_down.get("value") == "seen":
         notes.append(Line(f"Face down for {_ago(face_down.get('for_s', 0))}", "attention"))
@@ -316,10 +397,6 @@ def _notes(signs: dict, context: dict) -> tuple[Line, ...]:
                 notes.append(Line(text.format(ago=_ago(ago or 0), was=change["from"].replace("_", " ")),
                                   "attention"))
                 break
-    limbs = signs.get("limbs", {})
-    if limbs.get("value") == "some_not_moved":
-        names = ", ".join(REGION_NAMES.get(n, n) for n in limbs["not_moved"])
-        notes.append(Line(f"Not moved in {limbs['window_s']:.0f} s: {names}", "attention"))
     nearby = signs.get("person_nearby", {})
     if nearby.get("value") == "seen":
         notes.append(Line(f"Someone next to them for {_ago(nearby.get('for_s', 0))}"))
@@ -351,6 +428,7 @@ def build_scene(tracks: Sequence, signs, now: float, last_seen: LastSeen | None 
     marks = marks or {}
     lit = int(now * 2) % 2 == 0
     scene = Scene(out_of_view=last_seen.update(tracks, now) if last_seen is not None else [])
+    crowded = sum(track.detected for track in tracks) > TWO_ROWS_UP_TO
     for track in sorted(tracks, key=track_number):
         snapshot = signs.snapshot(track, now)
         if snapshot is None:
@@ -363,12 +441,18 @@ def build_scene(tracks: Sequence, signs, now: float, last_seen: LastSeen | None 
         posture = snapshot["posture"]["value"]
         mark = marks.get(track.track_id)
         waiting = mark is not None and mark.waiting
+        context = signs.display_context(track.track_id, now)
+        card = card_for(snapshot, context)
+        if crowded:
+            card = replace(card, body=())
+        if card.breathing is not None and context.get("breathing_trace") is not None:
+            scene.traces[track.track_id] = context["breathing_trace"]
         scene.callouts.append(Callout(
             track.track_id, number, identity_color(number),
-            "" if posture == "unknown" else posture.upper(), track.detected,
-            card_for(snapshot, signs.display_context(track.track_id, now)),
+            "" if posture == "unknown" else posture.upper(), track.detected, card,
             tuple(blood.get("regions", ())) if blood.get("value") == "detected" else (),
-            mark.priority if mark is not None else None, task_text(mark), waiting, lit or not waiting))
+            mark.priority if mark is not None else None, task_text(mark), waiting, lit or not waiting,
+            room_label(getattr(track, "zone_id", None))))
     return scene
 
 
@@ -475,6 +559,64 @@ def _drop(draw, cx, cy, color, filled: bool, k: float) -> None:
         shape(1.8, BOX_FILL)
 
 
+def _segments(draw, segments, color, k: float) -> None:
+    width = max(2, round(1.8 * k))
+    for points in segments:
+        draw.line([(x * k, y * k) for x, y in points], fill=color, width=width, joint="curve")
+
+
+def _head(draw, x, y, color, k: float, radius: float = 3.2) -> None:
+    draw.ellipse(((x - radius) * k, (y - radius) * k, (x + radius) * k, (y + radius) * k), fill=color)
+
+
+def _posture_icon(draw, cx, cy, kind: str, color, k: float) -> None:
+    if kind == "lying":
+        _head(draw, cx - 10, cy + 3, color, k)
+        _segments(draw, [[(cx - 6, cy + 4), (cx + 11, cy + 4)], [(cx - 3, cy + 4), (cx + 2, cy - 1)],
+                         [(cx - 13, cy + 9), (cx + 13, cy + 9)]], color, k)
+    elif kind == "sitting":
+        _head(draw, cx - 4, cy - 9, color, k)
+        _segments(draw, [[(cx - 4, cy - 5), (cx - 4, cy + 4), (cx + 5, cy + 4), (cx + 5, cy + 12)],
+                         [(cx - 4, cy - 2), (cx + 3, cy + 1)]], color, k)
+    else:
+        _head(draw, cx, cy - 10, color, k)
+        _segments(draw, [[(cx, cy - 6), (cx, cy + 3)], [(cx - 5, cy + 12), (cx, cy + 3), (cx + 5, cy + 12)],
+                         [(cx - 6, cy + 1), (cx, cy - 4), (cx + 6, cy + 1)]], color, k)
+
+
+def _movement_icon(draw, cx, cy, moving: bool, color, k: float) -> None:
+    if moving:                                              # a stepping figure with speed lines
+        _head(draw, cx + 3, cy - 10, color, k)
+        _segments(draw, [[(cx + 2, cy - 6), (cx, cy + 3)], [(cx - 5, cy + 12), (cx, cy + 3), (cx + 6, cy + 11)],
+                         [(cx - 4, cy - 1), (cx + 1, cy - 4), (cx + 7, cy - 1)],
+                         [(cx - 13, cy - 4), (cx - 8, cy - 4)], [(cx - 14, cy + 2), (cx - 8, cy + 2)]], color, k)
+        return
+    radius = 10                                             # a clock: how long still
+    draw.ellipse(((cx - radius) * k, (cy - radius) * k, (cx + radius) * k, (cy + radius) * k),
+                 outline=color, width=max(2, round(1.8 * k)))
+    _segments(draw, [[(cx, cy - 6), (cx, cy), (cx + 5, cy + 2)]], color, k)
+
+
+def _limbs_icon(draw, cx, cy, icon: str, color, k: float) -> None:
+    """A figure facing the viewer: still limbs amber, moved limbs white, everything grey if unknown."""
+    names = icon.partition(":")[2]
+    unknown = names == "?"
+    still = set() if unknown else set(filter(None, names.split(",")))
+    base = GREY if unknown else WHITE
+    _head(draw, cx, cy - 11, base, k)
+    _segments(draw, [[(cx, cy - 7), (cx, cy + 3)]], base, k)
+    ends = {"right_arm": ((cx, cy - 5), (cx - 8, cy + 2)), "left_arm": ((cx, cy - 5), (cx + 8, cy + 2)),
+            "right_leg": ((cx, cy + 3), (cx - 6, cy + 12)), "left_leg": ((cx, cy + 3), (cx + 6, cy + 12))}
+    for name, segment in ends.items():
+        _segments(draw, [segment], AMBER if name in still else base, k)
+
+
+def _fall_icon(draw, cx, cy, color, k: float) -> None:
+    _segments(draw, [[(cx - 2, cy - 11), (cx - 2, cy + 4)], [(cx - 7, cy - 1), (cx - 2, cy + 4), (cx + 3, cy - 1)],
+                     [(cx - 12, cy + 9), (cx + 12, cy + 9)]], color, k)
+    _head(draw, cx + 8, cy + 5, color, k, radius=2.6)
+
+
 def _ring(draw, cx, cy, radius, gauge: Gauge, k: float) -> None:
     box = ((cx - radius) * k, (cy - radius) * k, (cx + radius) * k, (cy + radius) * k)
     color = STATE_COLORS[gauge.state]
@@ -501,7 +643,16 @@ def _gauge(draw, x: float, top: float, gauge: Gauge, k: float) -> None:
     icon_color = GREY if gauge.state == "unknown" else color
     _ring(draw, cx, cy, radius, gauge, k)
     if gauge.label == "BREATHING":
-        _lungs(draw, cx, cy, icon_color, k)
+        if gauge.icon != "wave":                            # the live chest motion is drawn per frame instead
+            _lungs(draw, cx, cy, icon_color, k)
+    elif gauge.label == "POSTURE":
+        _posture_icon(draw, cx, cy, gauge.icon, icon_color, k)
+    elif gauge.label == "MOVEMENT":
+        _movement_icon(draw, cx, cy, gauge.icon == "moving", icon_color, k)
+    elif gauge.label == "LIMBS":
+        _limbs_icon(draw, cx, cy, gauge.icon, icon_color, k)
+    elif gauge.label == "FALL":
+        _fall_icon(draw, cx, cy, icon_color, k)
     elif gauge.label == PULSE:
         _heart(draw, cx, cy + 1, icon_color, k)
     elif gauge.label == "EYES":
@@ -555,9 +706,8 @@ def _box(callout: Callout, scale: float) -> tuple[np.ndarray, np.ndarray]:
     draw.rounded_rectangle((EDGE_W * k, 0, width * k - 1, height * k - 1), radius=radius, fill=BOX_FILL)
     draw.rectangle((EDGE_W * k, 0, (EDGE_W + 8) * k, height * k - 1), fill=BOX_FILL)   # square inner edge
 
-    top = 0
+    top = callout.top
     if callout.band:
-        top = BAND_H
         _band(draw, callout, width, k)
     number = str(callout.number)
     badge_w = 14 + 10 * len(number)
@@ -570,18 +720,19 @@ def _box(callout: Callout, scale: float) -> tuple[np.ndarray, np.ndarray]:
     if not callout.in_view:
         _text(draw, x, mid + 1, "NOT IN VIEW", "word", 17, GREY, k)
     else:
-        if callout.posture:
-            _text(draw, x, top + 21, callout.posture, "word", 19, WHITE, k, max_width=140)
-        _text(draw, width - 12, top + 21, card.movement.text, "word", 17, STATE_COLORS[card.movement.state], k,
-              max_width=140, anchor="rm")
-        draw.line(((left * k, (top + 37) * k), ((width - 12) * k, (top + 37) * k)), fill=(255, 255, 255, 34),
-                  width=max(1, round(k)))
-        gauges = card.gauges
-        start = EDGE_W + 6 + (5 - len(gauges)) * GAUGE_W / 2
-        for index, gauge in enumerate(gauges):
-            _gauge(draw, start + index * GAUGE_W, top + 40, gauge, k)
+        if callout.room:
+            _text(draw, x, top + 21, callout.room, "word", 19, WHITE, k, max_width=180)
+        if card.movement.text == "CAMERA MOVING":
+            _text(draw, width - 12, top + 21, card.movement.text, "word", 17, GREY, k, max_width=140, anchor="rm")
+        for row in range(len(card.rows)):
+            y = top + 37 + row * ROW_H
+            draw.line(((left * k, y * k), ((width - 12) * k, y * k)), fill=(255, 255, 255, 34),
+                      width=max(1, round(k)))
+        for gauge, gx, gy in callout.gauge_slots():
+            _gauge(draw, gx, gy, gauge, k)
+        lines_top = top + BOX_H - ROW_H * (2 - len(card.rows))
         for index, line in enumerate(card.lines):
-            _text(draw, (width + EDGE_W) / 2, top + BOX_H + 4 + index * HINT_H, line.text, "label", 12,
+            _text(draw, (width + EDGE_W) / 2, lines_top + 4 + index * HINT_H, line.text, "label", 12,
                   STATE_COLORS[line.state], k, max_width=width - 28, anchor="mm")
 
     size = (round(width * scale), round(height * scale))
@@ -818,9 +969,26 @@ def _draw_leader(canvas, rect, anchor, color) -> None:
     cv2.circle(canvas, end, 5, color, -1, cv2.LINE_AA)
 
 
+def _draw_wave(canvas, trace: np.ndarray, callout: Callout, x: int, y: int, scale: float) -> None:
+    """The last WAVE_S of chest motion inside the breathing ring, scaled to fill it."""
+    slot = next(((gx, gy) for gauge, gx, gy in callout.gauge_slots() if gauge is callout.card.breathing), None)
+    recent = np.asarray(trace, dtype=float)[-int(WAVE_S * RESAMPLE_HZ):]
+    if slot is None or len(recent) < 2:
+        return
+    cx, cy = x + (slot[0] + GAUGE_W / 2) * scale, y + (slot[1] + 23) * scale
+    half_w, half_h = 14 * scale, 7 * scale
+    span = float(np.ptp(recent))
+    xs = np.linspace(cx - half_w, cx + half_w, len(recent))
+    ys = np.full(len(recent), cy) if span <= 0 else cy + half_h - (recent - recent.min()) / span * 2 * half_h
+    color = (240, 210, 70) if callout.card.breathing.state == "active" else (245, 245, 245)
+    cv2.polylines(canvas, [np.column_stack([xs, ys]).round().astype(np.int32)], False, color,
+                  max(1, round(2 * scale)), cv2.LINE_AA)
+
+
 def box_scale(people: int, view_w: int) -> float:
-    """Smaller boxes for crowds and narrow pictures."""
-    crowd = 1.0 if people <= 2 else 0.85 if people <= 4 else 0.72
+    """Smaller boxes for crowds and narrow pictures. Two-row cards at 0.9 for two people covered a
+    face in 2% of random scenes, as often as the one-row cards did at full size."""
+    crowd = 1.0 if people <= 1 else 0.9 if people <= 2 else 0.85 if people <= 4 else 0.72
     return round(max(0.6, min(crowd, 0.5 * view_w / BOX_W)), 2)
 
 
@@ -892,6 +1060,9 @@ def render(image, tracks: Sequence, scene: Scene, layout: CalloutLayout | None =
         if callout.track_id in positions:
             x, y = positions[callout.track_id]
             _blend(canvas, _box(callout, scale), x, y)
+            trace = scene.traces.get(callout.track_id)
+            if trace is not None and callout.in_view and callout.card.breathing is not None:
+                _draw_wave(canvas, trace, callout, x, y, scale)
     items = tuple(status) + _out_of_view(scene)
     _blend(canvas, _strip(items, keys, view_w), 0, 0)
     for index, line in enumerate(warnings):

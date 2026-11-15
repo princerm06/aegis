@@ -28,6 +28,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
+from cv.appearance import appearance
 from cv.camera import Camera, camera_override, describe_cameras, list_cameras
 from cv.clock import Timebase, iso_utc, session_id
 from cv.homography import Calibration, CalibrationError
@@ -61,6 +62,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="serve the view as MJPEG on this port for the dashboard tile, e.g. 8090 (0 = off)")
     parser.add_argument("--stream-host", default="127.0.0.1",
                         help="stream address; 0.0.0.0 exposes the video to the network")
+    parser.add_argument("--stream-fps", type=float, default=12.0, help="stream frames per second")
+    parser.add_argument("--stream-quality", type=int, default=80, help="stream JPEG quality, 1-100")
+    parser.add_argument("--stream-width", type=int, default=0, help="shrink stream frames to this width (0 = full)")
+    parser.add_argument("--stream-url",
+                        help="address dashboards should use for the view (e.g. an HTTPS Tailscale name); "
+                             "default: this laptop's address for --stream-host")
     parser.add_argument("--duration", type=float, default=0.0, help="stop after N seconds (0 = run)")
     parser.add_argument("--summary-json", help="also write the measured run summary to this file")
     parser.add_argument("--room", help="mapping.zone_select keys: starting room (default: the first zone)")
@@ -185,6 +192,13 @@ def run(args: argparse.Namespace) -> int:
         signs.prepare()
         log.info("Observing signs%s; press c in the window right after giving a spoken command",
                  " and sending them" if settings.publisher.send_signs else " (shown only, not sent)")
+    voice = None
+    if signs is not None and not args.source:
+        from cv.voice_cue import VoiceCue
+
+        voice = VoiceCue.open(settings.signs)
+        if voice is not None:
+            voice.start()
 
     publisher = None
     if base_calibration is not None or zone_map is not None:
@@ -230,10 +244,13 @@ def run(args: argparse.Namespace) -> int:
         cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
     stream = None
     if args.stream_port:
-        from cv.stream import FrameStream
+        from cv.stream import FrameStream, public_url
 
-        stream = FrameStream(args.stream_host, args.stream_port)
+        stream = FrameStream(args.stream_host, args.stream_port, args.stream_fps, args.stream_quality,
+                             args.stream_width)
         stream.start()
+        if publisher is not None:
+            publisher.announce_stream(args.stream_url or public_url(stream, settings.publisher.base_url))
 
     def mark_command(now: float, source: str) -> None:
         if signs is None:
@@ -281,6 +298,9 @@ def run(args: argparse.Namespace) -> int:
                         tracker.set_calibration(calibration)
                         mapping_ready = calibration is not None
                 detections, inference_s = detector(frame.image)
+                if settings.tracking.reattach_appearance:
+                    for detection in detections:
+                        detection.appearance = appearance(frame.image, detection, settings.tracking.keypoint_min_conf)
                 tracks = tracker.update(detections, frame.t)
                 if signs is not None:
                     signs.update(frame.image, tracks, frame.t)
@@ -313,6 +333,8 @@ def run(args: argparse.Namespace) -> int:
 
             if stream is not None and stream.take_commands():
                 mark_command(now, "dashboard")
+            if voice is not None and voice.take():
+                mark_command(now, "voice")
             showing = not args.no_display or (stream is not None and stream.watched)
             if showing and frame is not None:
                 canvas = draw(frame.image, tracks, tracker, calibration, zone_map, camera, publisher,
@@ -332,6 +354,8 @@ def run(args: argparse.Namespace) -> int:
                     log.info("Room changed to %s", room)
     finally:
         camera.release()
+        if voice is not None:
+            voice.stop()
         if publisher is not None:
             publisher.stop()
         if _marks is not None:
@@ -499,6 +523,7 @@ def build_summary(run_at, frames, elapsed, inference_ms, tracker, publisher, cam
         "tracks_alive": len(tracker.tracks),
         "tracks_retired": tracker.retired_total,
         "tracks_created": tracker.created_total,
+        "tracks_recognised": tracker.merged_total,
         "camera_reconnects": camera.reconnects,
         "replay_loops": camera.loops,
     }
@@ -528,7 +553,7 @@ def print_summary(summary: dict) -> None:
         print(f"inference         : median {summary['inference_ms_median']} ms, "
               f"p95 {summary['inference_ms_p95']} ms")
     print(f"tracks            : {summary['tracks_alive']} alive, {summary['tracks_retired']} retired, "
-          f"{summary['tracks_created']} created")
+          f"{summary['tracks_created']} created, {summary['tracks_recognised']} returning people recognised")
     if "reports_accepted" in summary:
         print(f"published         : {summary['reports_accepted']} accepted, "
               f"{summary['reports_rejected']} rejected, {summary['reports_skipped']} skipped, "

@@ -5,7 +5,8 @@ import numpy as np
 import pytest
 
 from cv.monitor import UNKNOWN as UNKNOWN_VALUE
-from cv.monitor import (BOTTOM_MARGIN, BOX_H, BOX_W, CHIP_H, CHIP_W, HINT_H, MAX_VIEW_W, MIN_VIEW_W, TOP_BAR, VIEW_H,
+from cv.monitor import (BOTTOM_MARGIN, BOX_H, BOX_W, CHIP_H, CHIP_W, HINT_H, MAX_VIEW_W, MIN_VIEW_W, ROW_H, TOP_BAR,
+                        VIEW_H,
                         Callout, CalloutLayout, LastSeen, Scene, _anchor, _crosses, _inside, _leader_end,
                         _out_of_view, box_scale,
                         build_scene, card_for, identity_color, render)
@@ -58,13 +59,15 @@ def test_breathing_and_pulse_only_appear_with_a_reading():
     asked = {**still, "response": {"value": "not_tested", "confidence": 0.0, "command_at": "2026-11-14T12:00:00Z"}}
     assert card_for(asked).response.value == UNKNOWN_VALUE        # asked, but the person was not seen enough
     measuring = card_for(still, {"breathing_remaining_s": 6.2, "breathing_needed_s": 9.0})
-    assert measuring.breathing is None and measuring.hint == "Measuring breathing, keep still"
+    breath = measuring.breathing                                  # countdown with the live wave, no line
+    assert (breath.value, breath.state, breath.icon, measuring.hint) == ("6 s", "active", "wave", "")
+    assert breath.progress == pytest.approx(1 - 6.2 / 9.0)
     both = card_for({**still, "pulse": {"value": "not_testable", "confidence": 0.0, "reason": "measuring"}},
                     {"breathing_remaining_s": 6.2})
-    assert both.pulse is None and both.hint == "Measuring breathing and pulse, keep still"
-    assert card_for(still, {"breathing_remaining_s": 0.0}).hint == ""          # no clear rhythm: nothing shown
+    assert both.pulse is None and both.hint == "Measuring pulse, keep still"
+    assert card_for(still, {"breathing_remaining_s": 0.0}).breathing is None   # no clear rhythm: nothing shown
     moving = {**still, "movement": {"value": "moving", "confidence": 0.7, "still_for_s": 0.0}}
-    assert card_for(moving, {"breathing_remaining_s": 6.2}).hint == ""
+    assert card_for(moving, {"breathing_remaining_s": 6.2}).breathing is None
     assert card_for(moving).movement.text == "MOVING"
     estimated = card_for({**still, "pulse": {"value": "estimated", "confidence": 0.7, "rate_bpm": 72.4}})
     assert [g.label for g in estimated.gauges] == ["PULSE EST.", "EYES", "RESPONSE", "BLOOD"]
@@ -76,11 +79,43 @@ def test_breathing_rate_and_listening_countdown():
              "eyes": {"value": "open", "confidence": 0.9}, "visible_blood": {"value": "not_detected", "confidence": 0.8}}
     card = card_for(signs, {"listening_left_s": 6.0, "command_window_s": 8.0})
     assert (card.breathing.value, card.breathing.unit, card.breathing.state) == ("14", "/min", "observed")
+    assert card.breathing.icon == "wave"
     assert card.response.value == "6 s" and card.response.state == "active"
     assert card.response.progress == pytest.approx(0.75)          # the ring drains while listening
     assert card.eyes.value == "OPEN" and card.blood.value == "NOT SEEN" and card.blood.state == "observed"
     responded = card_for({**signs, "response": {"value": "responded", "confidence": 0.9}})
     assert responded.response.value == "YES" and responded.response.state == "observed"
+
+
+def test_second_row_posture_movement_limbs_and_fall():
+    card = card_for({**FINDINGS, **HISTORY}, {"fall_ago_s": 80.0})
+    assert [g.label for g in card.body] == ["POSTURE", "MOVEMENT", "LIMBS", "FALL"]
+    assert [(g.value, g.unit) for g in card.body] == [("LYING", ""), ("1:35", "still"), ("1 STILL?", ""),
+                                                       ("1:20", "ago")]
+    assert {g.state for g in card.body} == {"attention"} and card.body[2].icon == "limbs:left_leg"
+    calm = {**FINDINGS, "posture": {"value": "sitting", "confidence": 0.8},
+            "movement": {"value": "still", "confidence": 0.9, "still_for_s": 12.0},
+            "limbs": {"value": "all_moved", "confidence": 0.6}, "fall": {"value": "not_seen", "confidence": 0.5}}
+    body = card_for(calm).body
+    assert [(g.value, g.unit, g.state) for g in body] == [
+        ("SITTING", "", "observed"), ("12", "s still", "observed"), ("ALL MOVED", "", "observed"),
+        ("NOT SEEN", "", "observed")]
+    still = card_for({**calm, "limbs": {"value": "none_moved", "confidence": 0.5}}).body[2]
+    assert (still.value, still.icon) == ("ALL STILL?", "limbs:left_arm,right_arm,left_leg,right_leg")
+    assert [g.value for g in card_for(UNKNOWN).body] == [UNKNOWN_VALUE] * 4       # history off or camera moving
+    assert card_for({**calm, "movement": {"value": "moving", "confidence": 0.7}}).body[1].value == "MOVING"
+
+
+def test_the_live_breathing_wave_is_drawn_in_its_ring():
+    signs = {**FINDINGS, "breathing": {"value": "motion_detected", "confidence": 0.7, "rate_bpm": 15.0}}
+    person = Callout("s1-t1", 1, identity_color(1), "LYING", True, card_for(signs))
+    wave = np.sin(np.linspace(0, 4 * np.pi, 80))
+    image = np.full((720, 1280, 3), 90, np.uint8)
+    flat = render(image, [track(1)], Scene([person]), CalloutLayout())
+    waved = render(image, [track(1)], Scene([person], traces={"s1-t1": wave}), CalloutLayout())
+    changed = np.argwhere((waved != flat).any(axis=2))
+    assert 30 < len(changed) < 2000                              # a thin line inside one ring
+    assert np.ptp(changed[:, 0]) <= 20 and np.ptp(changed[:, 1]) <= 32
 
 
 HISTORY = {
@@ -99,14 +134,13 @@ HISTORY = {
 def test_what_happened_shows_under_the_gauges_most_important_first():
     context = {"fall_ago_s": 80.0, "walked_ago_s": 95.0, "waved_ago_s": 30.0, "changes_ago_s": [79.0, 40.0]}
     card = card_for({**UNKNOWN, **HISTORY}, context)
-    assert [line.text for line in card.notes] == [
-        "Fall seen 1:20 ago", "Face down for 12 s", "Waved 30 s ago", "Blood area growing, +45% in 30 s",
-        "Eyes closed 40 s ago, were open", "Not moved in 30 s: L LEG", "Someone next to them for 42 s",
-        "Walked 1:35 ago"]
-    assert card_for({**UNKNOWN, **HISTORY}, {**context, "waved_ago_s": 1.0}).notes[2].text == "Waving now"
+    assert [line.text for line in card.notes] == [                   # falls and limbs have gauges
+        "Face down for 12 s", "Waved 30 s ago", "Blood area growing, +45% in 30 s",
+        "Eyes closed 40 s ago, were open", "Someone next to them for 42 s", "Walked 1:35 ago"]
+    assert card_for({**UNKNOWN, **HISTORY}, {**context, "waved_ago_s": 1.0}).notes[1].text == "Waving now"
     card = card_for({**UNKNOWN, **{k: v for k, v in HISTORY.items() if k not in ("face_down", "waving")}}, context)
-    assert [line.text for line in card.lines] == ["Fall seen 1:20 ago", "Blood area growing, +45% in 30 s"]
-    assert {line.state for line in card.lines} == {"attention"}          # the breathing hint gives way
+    assert [line.text for line in card.lines] == ["Blood area growing, +45% in 30 s", "Eyes closed 40 s ago, were open"]
+    assert {line.state for line in card.lines} == {"attention"}
     assert callout(1, {**UNKNOWN, **HISTORY}, context=context).size == (BOX_W, BOX_H + 2 * HINT_H)
     quiet = card_for({**UNKNOWN, "fall": {"value": "not_seen", "confidence": 0.5}, "changes": []})
     assert quiet.lines == ()
@@ -118,7 +152,9 @@ def test_no_clinical_words_and_ascii_only():
     for signs in (FINDINGS, UNKNOWN, rate, {**FINDINGS, **HISTORY}):
         card = card_for(signs, {"fall_ago_s": 5.0, "walked_ago_s": 9.0, "waved_ago_s": 1.0,
                                 "changes_ago_s": [3.0, 2.0]})
-        texts = values(card) + [g.label for g in card.gauges] + [g.unit for g in card.gauges] + [card.hint]
+        every = card.gauges + card.body
+        texts = values(card) + [g.value for g in every] + [g.label for g in every] + [g.unit for g in every]
+        texts += [card.hint]
         texts += [line.text for line in card.notes]
         for text in texts:
             assert text.replace(UNKNOWN_VALUE, "").isascii()
@@ -161,12 +197,12 @@ def test_render_fits_any_frame_and_any_number_of_people(size, people):
 
 def test_boxes_sit_beside_their_person_inside_the_frame_and_apart():
     frame = (1280, 720)
-    size = (BOX_W, BOX_H)
+    size = (BOX_W, BOX_H - ROW_H)                                # three people: one row of gauges
     people = [("a", (200, 200, 320, 600), (260, 260), (240, 200, 280, 240)),
               ("b", (420, 220, 540, 620), (480, 280), (460, 220, 500, 260)),
               ("c", (900, 150, 1040, 640), (970, 220), None)]
     placed = CalloutLayout().place(people, size, frame)
-    rects = {key: (x, y, x + BOX_W, y + BOX_H) for key, (x, y) in placed.items()}
+    rects = {key: (x, y, x + size[0], y + size[1]) for key, (x, y) in placed.items()}
     for key, body, anchor, _ in people:
         x1, y1, x2, y2 = rects[key]
         assert x1 >= 0 and y1 >= TOP_BAR and x2 <= frame[0] and y2 <= frame[1] - BOTTOM_MARGIN
@@ -192,7 +228,8 @@ def test_a_box_follows_its_person_smoothly_and_is_forgotten_when_they_leave():
 
 
 def test_boxes_shrink_for_crowds_and_narrow_pictures():
-    assert box_scale(1, 1280) == 1.0 and box_scale(3, 1280) == 0.85 and box_scale(9, 1280) == 0.72
+    assert box_scale(1, 1280) == 1.0 and box_scale(2, 1280) == 0.9
+    assert box_scale(3, 1280) == 0.85 and box_scale(9, 1280) == 0.72
     assert box_scale(1, 600) == pytest.approx(0.73)
     assert box_scale(1, 200) == 0.6                              # never unreadably small
 
@@ -221,13 +258,30 @@ def test_scene_comes_from_the_live_signs_and_hides_people_long_out_of_view():
     scene = build_scene([gone, seen], estimator, 6.0)
     assert scene.hidden == 1 and [c.number for c in scene.callouts] == [1]
     (shown,) = scene.callouts
-    assert (shown.posture, shown.blood_regions) == ("LYING", ("torso",))
+    assert (shown.posture, shown.blood_regions, shown.room) == ("LYING", ("torso",), "ROOM 2")
+    assert shown.card.body[0].value.startswith("LYING")
     assert shown.card.eyes.value.startswith("CLOSED") and shown.card.blood.value.startswith("TORSO")
     gone.last_seen = 3.0                                       # out of view for 3 s: still shown, dimmed
     scene = build_scene([gone, seen], estimator, 6.0)
     assert scene.hidden == 0 and [c.in_view for c in scene.callouts] == [True, False]
     canvas = render(image, [gone, seen], scene)
     assert canvas.shape[0] == VIEW_H
+
+
+def test_cards_drop_the_second_row_when_three_people_are_in_view():
+    estimator = make_estimator()
+    image = body_image((300, 200, 340, 250))
+    seen = make_track()
+    seen.short_id, seen.zone_id, seen.published_xy, seen.last_seen = "t1", "room-2", None, 5.9
+    for i in range(60):
+        estimator.update(image, [seen], i / 10)
+    others = [SimpleNamespace(**{**vars(seen), "track_id": f"s1-t{n}", "short_id": f"t{n}"}) for n in (2, 3)]
+    for other in others:
+        estimator.states[other.track_id] = estimator.states["s1-t1"]
+    pair = build_scene([seen, others[0]], estimator, 6.0).callouts
+    crowd = build_scene([seen, *others], estimator, 6.0).callouts
+    assert all(len(c.card.rows) == 2 for c in pair) and all(len(c.card.rows) == 1 for c in crowd)
+    assert crowd[0].size[1] == pair[0].size[1] - ROW_H
 
 
 def test_people_who_left_are_listed_with_room_and_time_even_after_the_tracker_forgets_them():
@@ -249,7 +303,8 @@ def test_people_who_left_are_listed_with_room_and_time_even_after_the_tracker_fo
 def test_a_card_grows_by_one_line_only_when_it_has_something_to_explain():
     assert callout(1, FINDINGS).size == (BOX_W, BOX_H)
     assert callout(1, UNKNOWN).size == (BOX_W, BOX_H)
-    measuring = {**UNKNOWN, "movement": {"value": "still", "confidence": 0.9, "still_for_s": 3.0}}
+    measuring = {**UNKNOWN, "movement": {"value": "still", "confidence": 0.9, "still_for_s": 3.0},
+                 "pulse": {"value": "not_testable", "confidence": 0.0, "reason": "measuring"}}
     assert callout(1, measuring, context={"breathing_remaining_s": 5.0}).size == (BOX_W, BOX_H + HINT_H)
     assert callout(1, UNKNOWN, in_view=False).size == (CHIP_W, CHIP_H)     # no empty card for someone unseen
 

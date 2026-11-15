@@ -37,6 +37,7 @@ mapping:
 signs:
   enabled: true
   moving_camera: true
+  voice_cue_mic: iPhone     # a loud sound (the wearer calling out) starts the response check (cv/voice_cue.py)
 
 publisher:
   camera_id: bodycam-1

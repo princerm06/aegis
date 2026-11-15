@@ -13,23 +13,48 @@ private network). Frames are encoded only while someone is watching.
 from __future__ import annotations
 
 import logging
+import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
 
 import cv2
 
 log = logging.getLogger("cv.stream")
+LOOPBACK = ("127.0.0.1", "localhost")
 BOUNDARY = "aegisframe"
+REMOTE_SEND_BUFFER = 24 * 1024
 PAGE = (b"<!doctype html><title>AEGIS CV</title><body style='margin:0;background:#111'>"
         b"<img src='/stream.mjpg' style='width:100%'></body>")
 
 
+def lan_address(backend_url: str | None) -> str:
+    """This laptop's address on the network the backend is on, for viewers on other laptops."""
+    target = urlparse(backend_url).hostname if backend_url else None
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect((target or "192.168.0.1", 80))      # UDP: picks the route, sends nothing
+            return probe.getsockname()[0]
+    except OSError:
+        return socket.gethostname()
+
+
+def public_url(stream: "FrameStream", backend_url: str | None) -> str:
+    """The view's address as other machines reach it: loopback stays loopback."""
+    if stream.host in LOOPBACK:
+        return stream.url
+    host = stream.host if stream.host not in ("0.0.0.0", "") else lan_address(backend_url)
+    return f"http://{host}:{stream.port}/stream.mjpg"
+
+
 class FrameStream:
-    def __init__(self, host: str = "127.0.0.1", port: int = 8090, fps: float = 12.0, quality: int = 80):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8090, fps: float = 12.0, quality: int = 80,
+                 max_width: int = 0):
         self.host, self.port = host, port
         self.period = 1.0 / max(1.0, fps)
         self.quality = quality
+        self.max_width = max_width          # 0: full size
         self._jpeg: bytes | None = None
         self._frame_id = 0
         self._ready = threading.Condition()
@@ -126,6 +151,9 @@ class FrameStream:
         now = time.monotonic() if now is None else now
         if not self.watched or now - self._last_encode < self.period:
             return
+        if self.max_width and canvas.shape[1] > self.max_width:
+            height = round(canvas.shape[0] * self.max_width / canvas.shape[1])
+            canvas = cv2.resize(canvas, (self.max_width, height), interpolation=cv2.INTER_AREA)
         ok, buffer = cv2.imencode(".jpg", canvas, [cv2.IMWRITE_JPEG_QUALITY, self.quality])
         if not ok:
             return
@@ -145,6 +173,9 @@ class FrameStream:
         handler.send_header("Cache-Control", "no-store")
         handler.send_header("Access-Control-Allow-Origin", "*")
         handler.end_headers()
+        if handler.client_address[0] != "127.0.0.1":
+            # A slow network fills the default buffer with seconds of old frames; keep about two.
+            handler.connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, REMOTE_SEND_BUFFER)
         self._watch(1)
         seen = self._frame_id - 1 if self._jpeg is not None else 0
         try:

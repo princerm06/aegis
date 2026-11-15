@@ -148,6 +148,8 @@ class Publisher:
         self._accepted: dict[str, TrackReport] = {}
         self._counter = 0
         self._registered = settings.endpoint == "legacy"
+        self.stream_url: str | None = None
+        self._stream_url_supported = True
         self._backoff_s = 0.0
         self._backoff_until = 0.0
         self._last_logged: dict[str, float] = {}
@@ -247,8 +249,18 @@ class Publisher:
             return {"mode": "simulation", **common}
         return {"source": "cv", "kind": "person_detected", **common}
 
+    def announce_stream(self, url: str) -> None:
+        """Register (again) with the live view's address so dashboards show it without setup."""
+        if self.settings.endpoint != "camera":
+            return
+        self.stream_url = url
+        self._registered = False
+        self._wake.set()
+
     def registration_body(self) -> dict:
         body = {"mode": "simulation", "actor": self.settings.actor}
+        if self.stream_url and self._stream_url_supported:
+            body["stream_url"] = self.stream_url
         if self.zones is not None:
             return {**body, "mapping_mode": "predefined_zones", "zones": self.zones.registration()}
         return {**body, "mapping_mode": "calibrated_world", "calibration_ref": self.calibration_ref}
@@ -267,8 +279,8 @@ class Publisher:
         with self._lock:
             batch = list(self._pending.values())
             self._pending.clear()
-        if not batch:
-            return
+        if not batch and (self._registered or not self.stream_url):
+            return       # an announced stream registers before anyone is seen: the empty room shows too
         if not self._registered and not self._register():
             self._requeue(batch)
             return
@@ -325,8 +337,15 @@ class Publisher:
         if 200 <= status < 300:
             self._registered = True
             self.stats.registrations += 1
-            log.info("Registered camera %s (%s)", self.settings.camera_id, self.mapping_label)
+            log.info("Registered camera %s (%s)%s", self.settings.camera_id, self.mapping_label,
+                     f", view {self.stream_url}" if self.stream_url and self._stream_url_supported else "")
             return True
+        if status == 422 and self._stream_url_supported and "stream_url" in str(data):
+            # A backend from before stream_url forbids the field: register as before.
+            self._stream_url_supported = False
+            log.warning("Backend does not accept stream_url yet; registering without it "
+                        "(paste the tile link by hand)")
+            return self._register()
         if status == 409:
             # Immutable for this epoch: someone registered a different mapping.
             self._registered = True

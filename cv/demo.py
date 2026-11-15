@@ -6,6 +6,8 @@
     python -m cv.demo --bodycam-view-only   # body cam as a live view only, nothing sent from it
     python -m cv.demo --backend-url http://192.168.137.1:8000 --stream-host 0.0.0.0
                                        # shared backend; tiles viewable from other laptops
+    python -m cv.demo --backend-url http://<host's 100.x>:8000 --stream-host <this Mac's 100.x>
+                                       # over Tailscale: tiles only for the team's devices
     python -m cv.demo --no-display     # no windows on the laptop, dashboard tiles only
 
 Each camera runs as its own ``cv.main`` process (``cv/config/demo.yaml`` and
@@ -21,17 +23,17 @@ but sends no detections, so the same people do not appear twice on the map.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import signal
-import socket
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from typing import Sequence
-from urllib.parse import urlparse
 
 from cv.camera import describe_cameras, find_camera, list_cameras
 from cv.settings import CONFIG_DIR, CV_DIR, load_settings
+from cv.stream import lan_address
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,24 @@ class Feed:
     def url(self, host: str = "127.0.0.1") -> str:
         return f"http://{host}:{self.port}/stream.mjpg"
 
+
+# About 10 KB a frame: on the venue hotspot 640 px frames (22 KB) backed up at 5 fps.
+LAN_STREAM = ["--stream-fps", "10", "--stream-quality", "45", "--stream-width", "480"]
+# Capped above the ~15 fps camera loop so every frame goes out (a 12-15 cap sent every other one, ~8 fps);
+# about 60 KB a frame, 7 Mbit/s. Full 1280 px was 10 Mbit/s for no visible gain in the tile.
+TAILSCALE_STREAM = ["--stream-fps", "30", "--stream-quality", "80", "--stream-width", "960"]
+TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")
+
+
+def stream_preset(stream_host: str) -> list[str]:
+    """Stream settings for the network the tiles are served on: full on this Mac, sharp and smooth over Tailscale."""
+    if stream_host == "127.0.0.1":
+        return []
+    try:
+        on_tailscale = ipaddress.ip_address(stream_host) in TAILSCALE_NET
+    except ValueError:
+        on_tailscale = False
+    return TAILSCALE_STREAM if on_tailscale else LAN_STREAM
 
 FIXED = Feed("Fixed camera", "demo.yaml", 8090, "BUILDING CAM")
 BODYCAM = Feed("Body cam", "bodycam.yaml", 8091, "ALPHA · BODYCAM")
@@ -65,22 +85,12 @@ def command(feed: Feed, room: str, display: bool, backend_url: str | None = None
             stream_host: str = "127.0.0.1", view_only: bool = False) -> list[str]:
     argv = [sys.executable, "-m", "cv.main", "--config", str(CONFIG_DIR / feed.config),
             "--room", room, "--send-signs", "--stream-port", str(feed.port), "--stream-host", stream_host]
+    argv += stream_preset(stream_host)
     if backend_url:
         argv += ["--backend-url", backend_url]
     if view_only:
         argv += ["--mock-backend", "--quiet-mock"]
     return argv if display else [*argv, "--no-display"]
-
-
-def lan_address(backend_url: str | None) -> str:
-    """This laptop's address on the network the backend is on, for tile links on other laptops."""
-    target = urlparse(backend_url).hostname if backend_url else None
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
-            probe.connect((target or "192.168.0.1", 80))      # UDP: picks the route, sends nothing
-            return probe.getsockname()[0]
-    except OSError:
-        return socket.gethostname()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -106,7 +116,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         command(feed, args.room, not args.no_display, args.backend_url, args.stream_host,
                 view_only=args.bodycam_view_only and feed is BODYCAM), cwd=CV_DIR.parent))
         for feed in feeds]
-    host = "127.0.0.1" if args.stream_host == "127.0.0.1" else lan_address(args.backend_url)
+    host = lan_address(args.backend_url) if args.stream_host == "0.0.0.0" else args.stream_host
     print(f"\nPeople are reported in {args.room} to {args.backend_url or 'the configs backend'}."
           " Dashboard tiles (paste once, the browser remembers):")
     for feed in feeds:

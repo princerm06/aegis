@@ -60,6 +60,10 @@ class TrackingSettings:
     reattach_radius_m: float = 0.6
     reattach_radius_frac: float = 0.08  # uncalibrated: image distance / frame diagonal
     reattach_body_frac: float = 0.6     # uncalibrated: or this share of the person's box, if larger
+    reattach_appearance: bool = True    # else a new ID anywhere resumes the out-of-view track whose clothes match
+    appearance_max_distance: float = 0.35
+    appearance_margin: float = 0.1      # and the next-best out-of-view track must match this much worse
+    appearance_min_frames: int = 10     # colour learnt over this many frames before it is trusted
     zone_switch_frames: int = 5         # zones mode: frames in a new zone before switching
 
 
@@ -78,6 +82,10 @@ class SignsSettings:
     still_after_s: float = 2.0          # no movement for this long = still
     command_window_s: float = 8.0       # time to respond after a marked command
     response_threshold: float = 0.15    # limb displacement / body size that counts as a response
+    voice_cue_mic: str = ""             # microphone whose loud sound marks the command (cv/voice_cue.py); "" = key c only
+    voice_cue_ratio: float = 6.0        # this many times the room's background level ...
+    voice_cue_min_rms: float = 0.05     # ... and at least this (full scale 1; quiet room 0.003, noises up to 0.03)
+    voice_cue_min_s: float = 0.4        # for this long
     eyes: bool = True
     eyes_model: str = "face_landmarker.task"
     eyes_hz: float = 3.0
@@ -88,13 +96,14 @@ class SignsSettings:
     eyes_max_yaw_deg: float = 60.0      # head turned more: not_testable
     blood: bool = True
     blood_hz: float = 3.0
-    blood_min_fraction: float = 0.04    # red share of a body region to call it detected
-    blood_min_fraction_head: float = 0.02  # head disc is mostly hair/background; wounds are small
+    blood_min_fraction: float = 0.03    # red share of a body region to call it detected
+    blood_min_fraction_head: float = 0.05  # head disc picks up lips/shadows; need a clearer blot
     blood_min_pixels: int = 60
     blood_hue_max: int = 10             # red hue (OpenCV 0..180): <= this (orange side) ...
     blood_hue_min_wrap: int = 174       # ... or >= this (magenta side; pink is ~160-172)
-    blood_max_gb_ratio: float = 0.35    # green and blue <= this x red; skin is ~0.45
-    blood_val_min: int = 40             # minimum red channel (0..255)
+    blood_max_gb_ratio: float = 0.55    # green and blue <= this x red; stage makeup ~0.4-0.55, skin ~0.7
+    blood_val_min: int = 90             # minimum red channel (0..255); skips dark head shadows
+    blood_sat_min: int = 100            # minimum HSV saturation; skips pale pink / washed skin
     breathing: bool = True
     breathing_window_s: float = 15.0
     breathing_min_bpm: float = 6.0

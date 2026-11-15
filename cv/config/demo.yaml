@@ -37,9 +37,22 @@ tracking:
   # again near where they were) instead of 30 s. The cost: someone who walked
   # through stays listed as occluded for 5 minutes too.
   lost_after_s: 300.0
+  # Demo only. Every visible/occluded change replans the route, and a helper
+  # kneeling beside an actor drops the detection for about 0.6 s. With 0.5 s
+  # (the default) each kneel flipped the track to occluded and back; with 1.5 s
+  # the helper-kneels take had no flips (replans 6 -> 4 in 85 s). The cost: a
+  # real occlusion is reported 1.5 s after the actor was last seen instead of
+  # 0.5 s. It does not stop replans from the confidence crossing the backend's
+  # 0.5 threshold (the other 4), and it does not help when someone walking past
+  # makes the actor get a new track ID.
+  occlusion_grace_s: 1.5
 
 signs:
   enabled: true
+  # Sound activity at the C922's own microphone (the responder calling out "Can
+  # you hear me?", or any loud sound) starts the response check; loudness only,
+  # not speech recognition (cv/voice_cue.py). The key c stays as backup.
+  voice_cue_mic: C922
   # Seen from above, open eyelids look half closed: in the high-camera demo-two
   # take open eyes scored about 0.45 and closed eyes about 0.75 (0.4 is tuned on
   # frontal faces, where closed eyes score 0.7-0.9).

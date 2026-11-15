@@ -236,6 +236,19 @@ one track, so a person seen by both cameras would show as two detections.
 cards still show eyes, blood and posture up close) without a second marker on
 the map.
 
+**Response check by sound activity** (`cv/voice_cue.py`; `signs.voice_cue_mic`
+is `C922` in `demo.yaml`, `iPhone` in `bodycam.yaml`): nobody presses anything.
+This is a loudness detector, not speech recognition: it never reads words.
+When the responder calls out "Can you hear me? Raise your hand!", the
+microphone hears a loud sound and the camera starts the response check, as
+key **c** does. The trigger is 6 times the room's background and at least 0.05
+of full scale for 0.4 s (quiet room 0.003, noises up to 0.03), then nothing new
+until the 8 s check is over. Any loud sound starts it too (a shout, a clap, a
+loud narrator). Without the microphone it logs that and **c** still works.
+`python -m cv.voice_cue --mic C922` is a level meter to check the threshold.
+Checked on the C922 with speech played from the Mac speaker: the first phrase
+started the check, a second one inside the 8 s window did not start another.
+
 The rest of this section is what `cv.demo` runs for the fixed camera.
 
 `cv/config/demo.yaml` is `rooms.yaml` for the mounted C922 (2–2.5 m high,
@@ -263,6 +276,17 @@ second), and the view is drawn even with `--no-display`. It binds to localhost
 by default because the frames show people; `--stream-host 0.0.0.0` exposes it to
 the network. Measured on a replayed clip: about 9 frames per second to one
 viewer, and the command reached the pipeline.
+
+**The dashboard finds the view by itself.** With a stream and a backend, the
+camera registers at start (before anyone is seen) with `stream_url`: this
+laptop's address on the backend's network for `--stream-host 0.0.0.0`, the
+loopback address otherwise, or `--stream-url` (e.g. an HTTPS Tailscale name).
+The BUILDING CAM tile shows the first non-body camera's `stream_url` unless that
+browser picked a source by hand. A backend from before `stream_url` answers 422;
+the camera then registers without it as before (paste the link by hand).
+Checked end to end on Nov 15: the tile went live with nothing pasted, showed
+"waiting for camera" when the camera stopped, and came back on its own when it
+restarted.
 
 **Who needs help first, on the video** (`cv/assignments.py`): when publishing
 to a real backend, the pipeline reads `GET /state` every second. Once the
@@ -298,7 +322,7 @@ The phone sends `"zone_id": "zone-b"` instead of `position`. Registration is
   unique per report and reused only for a retry of the same report.
 - **States:**
   - `visible`: detected within the last 0.5 s (`occlusion_grace_s`, which
-    absorbs one-frame misses).
+    absorbs one-frame misses; `demo.yaml` uses 1.5 s, see its comment).
   - `occluded`: not detected since, but the track is alive.
   - `lost`: not detected for 30 s (`lost_after_s`). Sent once, then the ID is
     retired.
@@ -363,31 +387,42 @@ switches to the debug view with FPS, track states and publisher counters):
 - **A card beside each person**, tied to the chest by a line in the person's
   color, following them. The number, the card's left edge and the line share
   that color (never amber or cyan), so it is clear which card is whose. Top
-  line: number (same as the dashboard), posture, and how long they have been
-  still.
-- **Round gauges**, each with a fixed icon and label and one short value:
-  **eyes** (`OPEN` / `CLOSED`), **response** to a spoken command (`YES` /
-  `NO`, `NOT ASKED` before the first command), **blood** (`NOT SEEN` or the
-  region, `HEAD +1`; the region is also outlined in amber on the body).
-  **Breathing** (`16 /min`) and **pulse** (`72 /min`) only appear once the
-  camera has a rate; there is never a dash for them, and no "no chest
-  motion" (it is not evidence of no breathing, see the breathing results). While either is being measured one grey line says
-  "Measuring breathing and pulse, keep still".
+  line: number (same as the dashboard) and room, plus `CAMERA MOVING` on a
+  moving body cam.
+- **Two rows of round gauges**, each with a fixed icon and label and one
+  short value. Top row: **eyes** (`OPEN` / `CLOSED`), **response** to a
+  spoken command (`YES` / `NO`, `NOT ASKED` before the first command),
+  **blood** (`NOT SEEN` or the region, `HEAD +1`; the region is also outlined
+  in amber on the body). **Breathing** shows the live chest motion as a wave
+  in its ring: a cyan countdown while a still person is measured, then the
+  rate (`16 /min`); without a clear rhythm it is not shown, since "no chest
+  motion" is not evidence of no breathing (see the breathing results).
+  **Pulse** (`72 /min`) appears with an estimate; while it is measured a grey
+  line says "Measuring pulse, keep still". Second row: **posture** (`LYING`,
+  `SITTING`, `STANDING`), **movement** (`MOVING`, or how long still:
+  `1:35 still`), **limbs** (a figure with the arms and legs not moved in the
+  last 30 s in amber: `ALL MOVED`, `1 STILL`, `ALL STILL`) and **fall**
+  (`NOT SEEN`, or `1:20 ago`). With three or more people in view the cards
+  drop the second row: with it, a card covered part of a face in 15-18% of
+  random three-person scenes, against 4% with one row. Two people get cards
+  at 0.9 size, which covered a face in 2% of scenes, as often as one-row
+  cards at full size.
 - **The ring is the state:** white = observed; amber = notable observation
-  (no chest motion, eyes closed, no response, blood seen); dashed grey = the
-  camera cannot tell (a dash) or nothing was asked yet; cyan = in progress
-  (the response ring drains while it watches after a command). A trailing
+  (eyes closed, no response, blood seen, lying, still for 30 s, a limb not
+  moved, a fall); dashed grey = the camera cannot tell (a dash) or nothing was
+  asked yet; cyan = in progress (the response ring drains while it watches
+  after a command, the breathing ring fills while it measures). A trailing
   `?` marks a low confidence.
-- **What happened, under the gauges:** up to two short notes from the history
-  observations below, most important first: "Fall seen 1:20 ago", "Face down
-  for 0:12", "Waving now", "Blood area growing, +45% in 30 s", "Eyes closed
-  40 s ago, were open", "Not moved in 30 s: L LEG", then in white "Someone
-  next to them for 0:42" and "Walked 2:10 ago".
+- **What else happened, under the gauges:** up to two short notes from the
+  history observations below, most important first: "Face down for 0:12",
+  "Waving now", "Blood area growing, +45% in 30 s", "Eyes closed 40 s ago,
+  were open", then in white "Someone next to them for 0:42" and "Walked 2:10
+  ago".
 - **Placement:** a card goes beside its person where it covers no other card,
   no one's chest point and as few faces and bodies as possible, and where its
   line crosses no other line, card or face. It glides, and jumps rather than
   crossing another card. Portrait pictures get dark side margins for the
-  cards. Cards shrink for more than 2 and more than 4 people. Someone who
+  cards. Cards shrink for 2, more than 2 and more than 4 people. Someone who
   leaves the picture keeps a small `NOT IN VIEW` chip (no line) for 5 s, and
   is then listed in the top bar with room and time, newest first, for 10
   minutes (`OUT OF VIEW  3 ROOM 2 2:10`), also after the tracker retires them.
@@ -708,7 +743,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-213 tests. The suite covers:
+227 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.

@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from cv.homography import ground_point
@@ -83,6 +84,17 @@ def test_box_aspect_fallback_without_keypoints():
     assert classify_posture((0, 0, 300, 100)).label == "lying"
     assert classify_posture((0, 0, 50, 200)).label == "standing"
     assert classify_posture((0, 0, 100, 120)).label == "unknown"
+
+
+def test_a_close_up_of_head_and_shoulders_is_not_lying():
+    # Live C922, Nov 14: sitting 1 m from the camera, hips out of the picture, the wide box read as lying.
+    xy, kc = np.zeros((17, 2)), np.zeros(17)
+    xy[[0, 5, 6]] = [(640, 300), (480, 560), (800, 570)]
+    kc[[0, 5, 6]] = 0.9
+    box = (300, 250, 980, 720)                                   # much wider than tall
+    assert classify_posture(box, xy, kc).label == "unknown"
+    xy[0] = (300, 565)                                           # head beside the shoulders: lying, hips hidden
+    assert classify_posture(box, xy, kc).label == "lying"
 
 
 def test_posture_vote_takes_the_majority_and_scales_confidence():
