@@ -345,6 +345,15 @@ def test_history_signs_stay_off_the_wire_until_the_backend_accepts_them():
     assert transport.posts()[0]["signs"] == history
 
 
+def test_breathing_is_only_sent_with_a_reading():
+    for value, sent in (("not_testable", False), ("motion_detected", True), ("no_motion_detected", True)):
+        publisher, transport, _ = signs_publisher(send_signs=True)
+        signs = {**SIGNS, "breathing": {"value": value, "confidence": 0.5}}
+        publisher.submit([replace(report(100.0), signs=signs)])
+        publisher.step()
+        assert ("breathing" in transport.posts()[0]["signs"]) == sent
+
+
 def test_a_changed_sign_value_is_sent_before_the_heartbeat():
     publisher, _, clock = signs_publisher(send_signs=True)
     assert publisher.submit([replace(report(100.0), signs=SIGNS)]) == 1

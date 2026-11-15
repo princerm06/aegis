@@ -57,6 +57,9 @@ legacy route), present only on `visible` reports:
 | `breathing`     | `motion_detected` / `no_motion_detected` / `not_testable` | `rate_bpm` (only when detected) | Optical flow on the chest while the person is still, clear spectral peak in 6–40 /min in both halves of a 15 s window. `no_motion_detected` = chest motion under 0.3 px (low confidence); irregular motion = `not_testable`. Tuned to miss faint breathing rather than report breathing that is not there |
 | `visible_blood` | `detected` / `not_detected` / `not_testable`              | `regions`, `method`             | Deep-red pixels (green and blue ≤ 0.35 × red, which excludes skin and lips) inside body regions from keypoints (`color`), later a fine-tuned model (`model`). Red clothing triggers it                                                                                                                    |
 
+`breathing` is optional and the CV leaves it out while it is `not_testable`, so the
+dashboard shows nothing for breathing until the camera has a reading.
+
 **Moving cameras (bodycam, handheld).** These add `camera_motion`, measured from
 the background:
 
