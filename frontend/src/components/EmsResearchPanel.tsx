@@ -104,7 +104,7 @@ export function EmsResearchPanel({ scrollIntoViewOnMount = false }: { scrollInto
     <section ref={ref} id="ems-research" className="panel border border-line" aria-label="Historical NYC EMS research advisory" data-ems-status={statusLabel}>
       <PanelHeader
         title="NYC EMS · Historical XGBoost"
-        sub={<span className="mono text-[10px] text-muted">REAL-DATA-TRAINED · RESEARCH ONLY · NO DISPATCH AUTHORITY</span>}
+        sub={<span className="mono text-[10px] text-muted">RESEARCH ONLY · NO DISPATCH AUTHORITY</span>}
         right={<Badge tone={current?.status === "available" ? "ok" : current?.status === "disabled" ? "neutral" : "warn"}>{statusLabel}</Badge>}
       />
       <div className="space-y-3 p-3 text-xs">
