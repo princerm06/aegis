@@ -60,6 +60,10 @@ class TrackingSettings:
     reattach_radius_m: float = 0.6
     reattach_radius_frac: float = 0.08  # uncalibrated: image distance / frame diagonal
     reattach_body_frac: float = 0.6     # uncalibrated: or this share of the person's box, if larger
+    reattach_appearance: bool = True    # else a new ID anywhere resumes the out-of-view track whose clothes match
+    appearance_max_distance: float = 0.35
+    appearance_margin: float = 0.1      # and the next-best out-of-view track must match this much worse
+    appearance_min_frames: int = 10     # colour learnt over this many frames before it is trusted
     zone_switch_frames: int = 5         # zones mode: frames in a new zone before switching
 
 

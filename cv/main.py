@@ -28,6 +28,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
+from cv.appearance import appearance
 from cv.camera import Camera, camera_override, describe_cameras, list_cameras
 from cv.clock import Timebase, iso_utc, session_id
 from cv.homography import Calibration, CalibrationError
@@ -297,6 +298,9 @@ def run(args: argparse.Namespace) -> int:
                         tracker.set_calibration(calibration)
                         mapping_ready = calibration is not None
                 detections, inference_s = detector(frame.image)
+                if settings.tracking.reattach_appearance:
+                    for detection in detections:
+                        detection.appearance = appearance(frame.image, detection, settings.tracking.keypoint_min_conf)
                 tracks = tracker.update(detections, frame.t)
                 if signs is not None:
                     signs.update(frame.image, tracks, frame.t)
@@ -519,6 +523,7 @@ def build_summary(run_at, frames, elapsed, inference_ms, tracker, publisher, cam
         "tracks_alive": len(tracker.tracks),
         "tracks_retired": tracker.retired_total,
         "tracks_created": tracker.created_total,
+        "tracks_recognised": tracker.merged_total,
         "camera_reconnects": camera.reconnects,
         "replay_loops": camera.loops,
     }
@@ -548,7 +553,7 @@ def print_summary(summary: dict) -> None:
         print(f"inference         : median {summary['inference_ms_median']} ms, "
               f"p95 {summary['inference_ms_p95']} ms")
     print(f"tracks            : {summary['tracks_alive']} alive, {summary['tracks_retired']} retired, "
-          f"{summary['tracks_created']} created")
+          f"{summary['tracks_created']} created, {summary['tracks_recognised']} returning people recognised")
     if "reports_accepted" in summary:
         print(f"published         : {summary['reports_accepted']} accepted, "
               f"{summary['reports_rejected']} rejected, {summary['reports_skipped']} skipped, "

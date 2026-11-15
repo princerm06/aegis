@@ -3,7 +3,9 @@
 Responsibilities:
 - Canonical track IDs ``{session}-t{n}`` that are never reused, even when
   ByteTrack hands out a new raw ID for the same person after an occlusion
-  (optional spatial re-attach to a recently occluded track).
+  (optional spatial re-attach to a recently occluded track). A new person is
+  held back for a few frames while their clothing colour is learnt; a clear
+  match with someone out of view resumes that person's track (cv.appearance).
 - Floor position: ground point -> homography -> EMA -> deadband, so the
   published position only changes when the person actually moved.
 - Zones mode (no homography): the ground point picks a predefined zone, which
@@ -22,6 +24,9 @@ import math
 from collections import deque
 from dataclasses import dataclass, field
 
+import numpy as np
+
+from cv.appearance import distance as appearance_distance
 from cv.detector import Detection
 from cv.homography import Calibration, ground_point
 from cv.observations import UNKNOWN_POSTURE, PostureEstimate, classify_posture, vote_posture
@@ -57,6 +62,9 @@ class Track:
     keypoints: object = None
     keypoint_conf: object = None
     reattached: int = 0
+    appearance: np.ndarray | None = None             # running mean of the torso colour histogram
+    appearance_frames: int = 0
+    tentative: bool = False                          # new, not reported until its clothes are checked
 
     @property
     def is_occluded(self) -> bool:
@@ -101,10 +109,11 @@ class TrackManager:
         self._counter = 0
         self.untracked = 0          # detections without a tracker ID in the last frame
         self.retired_total = 0
+        self.merged_total = 0       # new IDs recognised by their clothes as someone already tracked
 
     @property
     def created_total(self) -> int:
-        return self._counter
+        return self._counter - self.merged_total
 
     def set_calibration(self, calibration: Calibration | None) -> None:
         self.calibration = calibration
@@ -148,10 +157,12 @@ class TrackManager:
             track.detected = False
 
         new: list[Detection] = []
+        applied: dict[str, Detection] = {}
         for raw_id in sorted(best):
             track_id = self._raw_to_track.get(raw_id)
             if track_id in self.tracks:
                 self._apply(self.tracks[track_id], best[raw_id], t)
+                applied[track_id] = best[raw_id]
             else:
                 new.append(best[raw_id])
 
@@ -161,16 +172,39 @@ class TrackManager:
             target = self._reattach_candidate(xy, ground) if self.settings.reattach else None
             if target is None:
                 target = self._create(t)
+                target.tentative = (self.settings.reattach and self.settings.reattach_appearance
+                                    and detection.appearance is not None)
             else:
                 target.reattached += 1
-            for raw, track_id in list(self._raw_to_track.items()):
-                if track_id == target.track_id:
-                    del self._raw_to_track[raw]
-            self._raw_to_track[detection.raw_id] = target.track_id
+            self._link(detection.raw_id, target)
             self._apply(target, detection, t, posture)
+            applied[target.track_id] = detection
 
+        self._settle_tentative(applied, t)
         self._refresh(t)
         return list(self.tracks.values())
+
+    def _link(self, raw_id: int, track: Track) -> None:
+        for raw, track_id in list(self._raw_to_track.items()):
+            if track_id == track.track_id:
+                del self._raw_to_track[raw]
+        self._raw_to_track[raw_id] = track.track_id
+
+    def _settle_tentative(self, applied: dict[str, Detection], t: float) -> None:
+        """A new person whose clothes, learnt over their first frames, clearly match someone out of view
+        is that person back: their track resumes and the new one is dropped before it is ever reported."""
+        for track in [tr for tr in self.tracks.values() if tr.tentative and tr.detected]:
+            if track.frames_seen < self.settings.appearance_min_frames:
+                continue
+            track.tentative = False
+            target = self._appearance_candidate(track.appearance)
+            if target is None:
+                continue
+            del self.tracks[track.track_id]
+            self._link(track.raw_id, target)
+            target.reattached += 1
+            self._apply(target, applied[track.track_id], t)
+            self.merged_total += 1
 
     def _create(self, t: float) -> Track:
         self._counter += 1
@@ -217,6 +251,28 @@ class TrackManager:
                 best, best_score = track, score
         return best
 
+    def _appearance_candidate(self, colours: np.ndarray | None) -> Track | None:
+        """The out-of-view track whose clothes clearly match, wherever the person reappears.
+
+        Needs a close match and a clear winner, so two people in similar clothes
+        (or a stranger in the same colour while one is out of view and the other
+        is not) are left as a new track rather than swapped.
+        """
+        settings = self.settings
+        if colours is None:
+            return None
+        scored = sorted(
+            (appearance_distance(colours, track.appearance), track.track_id)
+            for track in self.tracks.values()
+            if not track.detected and not track.tentative and track.appearance is not None
+            and track.appearance_frames >= settings.appearance_min_frames
+        )
+        if not scored or scored[0][0] > settings.appearance_max_distance:
+            return None
+        if len(scored) > 1 and scored[1][0] - scored[0][0] < settings.appearance_margin:
+            return None
+        return self.tracks[scored[0][1]]
+
     def _apply(self, track: Track, detection: Detection, t: float,
                posture: PostureEstimate | None = None) -> None:
         settings = self.settings
@@ -227,6 +283,13 @@ class TrackManager:
         track.frames_seen += 1
         track.bbox = detection.bbox
         track.keypoints, track.keypoint_conf = detection.keypoints, detection.keypoint_conf
+        if detection.appearance is not None:
+            track.appearance_frames += 1
+            if track.appearance is None:
+                track.appearance = detection.appearance
+            else:
+                weight = max(1.0 / track.appearance_frames, 0.05)
+                track.appearance = (1 - weight) * track.appearance + weight * detection.appearance
         track.confidence = detection.confidence
         track.confidence_smoothed = (
             detection.confidence if track.frames_seen == 1
@@ -291,7 +354,8 @@ class TrackManager:
         for raw, track_id in list(self._raw_to_track.items()):
             if track_id == track.track_id:
                 del self._raw_to_track[raw]
-        self._retired_unreported.append(track)
+        if not track.tentative:
+            self._retired_unreported.append(track)
         self.retired_total += 1
 
     def reports(self, t: float) -> list[TrackReport]:
@@ -303,7 +367,7 @@ class TrackManager:
         retired, self._retired_unreported = self._retired_unreported, []
         reports = []
         for track in [*self.tracks.values(), *retired]:
-            if track.published_xy is None:
+            if track.published_xy is None or track.tentative:
                 continue
             reports.append(TrackReport(
                 track_id=track.track_id, state=track.state, observed_t=max(t, track.last_seen),

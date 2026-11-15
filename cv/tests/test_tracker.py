@@ -1,3 +1,5 @@
+import numpy as np
+
 from cv.settings import TrackingSettings
 from cv.tests.helpers import det, scale_calibration, standing_box
 from cv.tracker import TrackManager
@@ -96,6 +98,62 @@ def test_reattach_can_be_disabled():
     tracks.update([], t=1.0)
     result = tracks.update([det(9, standing_box(120, 220))], t=1.5)
     assert len(result) == 2
+
+
+def colours(*weights):
+    hist = np.zeros(12, dtype=np.float32)
+    hist[:len(weights)] = weights
+    return hist / hist.sum()
+
+
+RED, BLUE, REDDISH = colours(8, 1, 1), colours(0, 1, 1, 8), colours(7, 1, 2)
+
+
+def seen(raw_id, x, appearance, conf=0.9):
+    detection = det(raw_id, standing_box(x, 220), conf)
+    detection.appearance = appearance
+    return detection
+
+
+def walk(tracks, detections_at, start, frames=12):
+    for i in range(frames):
+        tracks.update(detections_at(), t=start + 0.1 * i)
+
+
+def test_someone_back_in_view_elsewhere_resumes_their_track_by_clothes():
+    tracks = manager()
+    walk(tracks, lambda: [seen(1, 120, RED)], 0.0)
+    tracks.update([], t=2.0)                                  # walked out of view
+    tracks.update([seen(7, 800, REDDISH)], t=3.0)             # back, 6.8 m away
+    assert tracks.reports(3.0)[-1].track_id == "s1-t1"        # new ID held back while its clothes are learnt
+    walk(tracks, lambda: [seen(7, 800, REDDISH)], 3.1)
+    assert list(tracks.tracks) == ["s1-t1"] and tracks.merged_total == 1 and tracks.created_total == 1
+    assert [r.track_id for r in tracks.reports(4.5)] == ["s1-t1"]
+
+
+def test_someone_in_other_clothes_is_a_new_person_reported_once_checked():
+    tracks = manager()
+    walk(tracks, lambda: [seen(1, 120, RED)], 0.0)
+    tracks.update([], t=2.0)
+    tracks.update([seen(7, 800, BLUE)], t=3.0)
+    assert [r.track_id for r in tracks.reports(3.0)] == ["s1-t1"]
+    walk(tracks, lambda: [seen(7, 800, BLUE)], 3.1)
+    assert sorted(r.track_id for r in tracks.reports(4.5)) == ["s1-t1", "s1-t2"]
+
+
+def test_two_lookalikes_out_of_view_are_not_guessed_between():
+    tracks = manager()
+    walk(tracks, lambda: [seen(1, 120, RED), seen(2, 400, RED)], 0.0)
+    tracks.update([], t=2.0)
+    walk(tracks, lambda: [seen(9, 800, RED)], 3.0)
+    assert sorted(tracks.tracks) == ["s1-t1", "s1-t2", "s1-t3"]
+
+
+def test_a_new_id_gone_before_it_is_checked_is_never_reported():
+    tracks = manager()
+    tracks.update([seen(1, 120, RED)], t=0.0)
+    tracks.update([], t=11.0)
+    assert tracks.reports(11.0) == []
 
 
 def test_visible_track_is_not_stolen_by_a_new_id():
