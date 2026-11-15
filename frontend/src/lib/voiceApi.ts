@@ -30,6 +30,12 @@ export interface VoiceHealthResponse {
   elevenlabs_voice_id: string;
   elevenlabs_tts_model: string;
   elevenlabs_stt_model: string;
+  limits?: {
+    max_audio_bytes: number;
+    max_recording_seconds: number;
+    max_tts_chars: number;
+    max_input_chars: number;
+  };
 }
 
 export interface VoiceTurnResponse {

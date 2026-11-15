@@ -3,11 +3,15 @@
 // and opening it never hides responder Comms. Non-destructive (does not reset the simulation).
 // Requires: the Next app (BASE, default :3000), backend (BACKEND, default :8000) and the Voice
 // service behind /aegis-voice (default :8010). Run: node scripts/e2e-ask-aegis.mjs
-// Works with or without ElevenLabs credentials: without them it verifies the text-only fallback.
+// Works with or without ElevenLabs credentials: in text-only mode it verifies the mic explains itself
+// and never records; with speech (real ElevenLabs, or the scripts/mock-voice-speech.mjs test stub) it
+// runs record → transcript → answer → spoken playback → Stop/Play/Mute, cancel, and mic cleanup.
+// LAN_BASE (optional, e.g. http://192.168.x.y:3000): also checks the plain-HTTP LAN page explains the mic.
 import puppeteer from "puppeteer-core";
 
 const BASE = process.env.BASE ?? "http://127.0.0.1:3000";
 const BACKEND = process.env.BACKEND ?? "http://127.0.0.1:8000";
+const LAN_BASE = process.env.LAN_BASE;
 const CHROME = process.env.CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const SIZES = [[1440, 900], [1366, 768], [1280, 800], [1280, 720]];
 
@@ -58,7 +62,7 @@ console.log(`Ask AEGIS browser test — ${BASE}/command (SIMULATION ONLY)`);
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: true,
-  args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+  args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"],
 });
 const errors = [];
 try {
@@ -118,23 +122,97 @@ try {
   if ((await usable(page, '[data-testid="ask-aegis-turn"]')) !== "ok") fail("Newest answer not visible in the open sheet");
   ok("Newest answer is visible without scrolling");
 
-  // 3. Microphone: permission granted (fake device) — records, then either speech or a clear text-only note.
-  await page.click('[data-testid="ask-aegis-ptt"]');
-  await page.waitForFunction(() => /Stop & Send/.test(document.querySelector('[data-testid="ask-aegis-ptt"]').textContent), { timeout: 5000 });
-  ok("Mic permission granted: recording starts ('● Stop & Send')");
-  await sleep(1500);
-  await page.click('[data-testid="ask-aegis-ptt"]');
-  const micOutcome = await page
-    .waitForFunction(
-      () => {
-        const banner = document.querySelector('[data-testid="ask-aegis-banner"]')?.innerText;
-        const turns = document.querySelectorAll('[data-testid="ask-aegis-turn"]').length;
-        return banner || turns >= 3 ? banner || "turn" : false;
-      },
-      { timeout: 25000 },
-    )
-    .then((h) => h.jsonValue());
-  ok(`Mic turn finished: ${micOutcome === "turn" ? "speech answered" : `fallback note — "${micOutcome.slice(0, 120)}"`}`);
+  // 3. Microphone. Track every stream the page opens so cleanup can be checked.
+  const speech = health.operational_mode === "full_speech";
+  const voiceTurnRequests = [];
+  page.on("request", (r) => r.url().includes("/aegis-voice/api/v1/voice/audio-turn") && voiceTurnRequests.push(Date.now()));
+  const status = () => page.$eval('[data-testid="ask-aegis-status"]', (e) => e.textContent.trim());
+  const banner = () => page.evaluate(() => document.querySelector('[data-testid="ask-aegis-banner"]')?.innerText ?? "");
+  const turnCount = () => page.$$eval('[data-testid="ask-aegis-turn"]', (t) => t.length);
+  const liveTracks = () => page.evaluate(() => (window.__aegisStreams ?? []).flatMap((s) => s.getTracks()).filter((t) => t.readyState !== "ended").length);
+  await page.evaluateOnNewDocument(() => {
+    const orig = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
+    if (!orig) return;
+    window.__aegisStreams = [];
+    navigator.mediaDevices.getUserMedia = async (c) => {
+      const s = await orig(c);
+      window.__aegisStreams.push(s);
+      return s;
+    };
+  });
+  await page.reload({ waitUntil: "networkidle0" });
+  await page.click('[aria-label="Expand Ask AEGIS panel"]');
+  await page.waitForSelector('[data-testid="ask-aegis-capabilities"]');
+  const caps = await page.$eval('[data-testid="ask-aegis-capabilities"]', (e) => e.textContent);
+  ok(`Capability line shown up front: "${caps.trim()}"`);
+
+  if (!speech) {
+    const mic = await page.$eval('[data-testid="ask-aegis-ptt"]', (e) => [e.dataset.mic, e.textContent]);
+    if (mic[0] !== "speech-off" || !/Mic off/.test(mic[1])) fail(`text-only host: mic should be off with a reason, got ${mic}`);
+    await page.click('[data-testid="ask-aegis-ptt"]');
+    await sleep(500);
+    if (!/voice\/\.env/.test(await banner())) fail(`speech-off explanation missing: ${await banner()}`);
+    if (voiceTurnRequests.length || (await liveTracks())) fail("text-only host: mic must not record or send");
+    ok("Text-only host: 🎙 Mic off explains voice/.env setup on press; nothing recorded or sent (typed questions still work)");
+  } else {
+    // Record → transcript → grounded answer → spoken playback.
+    const n0 = await turnCount();
+    await page.click('[data-testid="ask-aegis-ptt"]');
+    await page.waitForFunction(() => /Stop & Send/.test(document.querySelector('[data-testid="ask-aegis-ptt"]').textContent), { timeout: 5000 });
+    await sleep(1300);
+    if (!/LISTENING 0:0[1-9]/.test(await status())) fail(`listening timer not shown: ${await status()}`);
+    ok(`Recording: status "${await status()}" with timer; Cancel (✕) offered`);
+    await page.click('[data-testid="ask-aegis-ptt"]');
+    await page.waitForFunction((n) => document.querySelectorAll('[data-testid="ask-aegis-turn"]').length > n, { timeout: 25000 }, n0);
+    const q = await page.$eval('[data-testid="ask-aegis-question"]', (e) => e.textContent);
+    if (/spoken audio/.test(q)) fail("transcript not shown");
+    ok(`Voice turn: transcript "${q.replace(/^You:\s*/, "").trim()}" → grounded answer`);
+    if (await liveTracks()) fail("microphone still live after Stop & Send");
+    ok("Microphone released after Stop & Send (all tracks ended)");
+    await page.waitForFunction(() => /SPEAKING/.test(document.querySelector('[data-testid="ask-aegis-status"]').textContent), { timeout: 8000 });
+    await page.click('[data-testid="ask-aegis-stop"]');
+    await page.waitForFunction(() => !/SPEAKING/.test(document.querySelector('[data-testid="ask-aegis-status"]').textContent), { timeout: 3000 });
+    ok("Spoken answer played; ■ Stop ends playback immediately");
+    await page.click('[data-testid="ask-aegis-play"]');
+    await page.waitForFunction(() => /SPEAKING/.test(document.querySelector('[data-testid="ask-aegis-status"]').textContent), { timeout: 3000 });
+    await page.click('[data-testid="ask-aegis-mute"]');
+    await page.waitForFunction(() => !/SPEAKING/.test(document.querySelector('[data-testid="ask-aegis-status"]').textContent), { timeout: 3000 });
+    await page.click('[data-testid="ask-aegis-mute"]');
+    ok("▶ Play replays an answer; muting stops playback");
+
+    // Contextual follow-up.
+    const n1 = await turnCount();
+    await page.type('[data-testid="ask-aegis-input"]', "Tell me more.");
+    await page.click('[data-testid="ask-aegis-send"]');
+    await page.waitForFunction((n) => document.querySelectorAll('[data-testid="ask-aegis-turn"]').length > n, { timeout: 20000 }, n1);
+    ok("Follow-up 'Tell me more.' answered in the same session");
+
+    // Cancel with Escape: nothing sent, mic released.
+    await page.evaluate(() => document.querySelector('[data-testid="ask-aegis-stop"]')?.click());
+    const sentBefore = voiceTurnRequests.length;
+    const n2 = await turnCount();
+    await page.click('[data-testid="ask-aegis-ptt"]');
+    await page.waitForFunction(() => /Stop & Send/.test(document.querySelector('[data-testid="ask-aegis-ptt"]').textContent), { timeout: 5000 });
+    await sleep(800);
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => /nothing was sent/.test(document.querySelector('[data-testid="ask-aegis-banner"]')?.innerText ?? ""), { timeout: 3000 });
+    await sleep(500);
+    if (voiceTurnRequests.length !== sentBefore || (await turnCount()) !== n2) fail("cancelled recording was sent");
+    if (await liveTracks()) fail("microphone still live after cancel");
+    ok("Esc cancels a recording: nothing sent, microphone released");
+
+    // Leaving the page mid-recording: never sends, mic released.
+    await page.click('[data-testid="ask-aegis-ptt"]');
+    await page.waitForFunction(() => /Stop & Send/.test(document.querySelector('[data-testid="ask-aegis-ptt"]').textContent), { timeout: 5000 });
+    await sleep(600);
+    await page.click('a[href="/"]');
+    await page.waitForFunction(() => location.pathname === "/", { timeout: 10000 });
+    await sleep(800);
+    if (voiceTurnRequests.length !== sentBefore) fail("recording was sent after leaving the page");
+    if (await liveTracks()) fail("microphone still live after leaving the page");
+    ok("Leaving the Command Center mid-recording: nothing sent, microphone released");
+    await page.goto(`${BASE}/command`, { waitUntil: "networkidle0" });
+  }
 
   // 4. Mute toggle works.
   const m0 = await page.$eval('[data-testid="ask-aegis-mute"]', (e) => e.textContent);
@@ -150,21 +228,60 @@ try {
   if (stateBefore !== stateAfter) fail("Simulation state changed during Voice use");
   ok("Read-only: no POST/PUT/PATCH/DELETE to the AEGIS backend; priorities/approvals/assignments/dispatch unchanged");
 
-  // 6. Microphone denied → clear message, typed input still works.
-  const ctx = await browser.createBrowserContext();
-  const p2 = await ctx.newPage();
-  await p2.setViewport({ width: 1366, height: 768 });
-  await p2.evaluateOnNewDocument(() => {
-    navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException("Permission denied", "NotAllowedError"));
-  });
-  await p2.goto(`${BASE}/command`, { waitUntil: "networkidle0" });
-  await p2.click('[data-testid="ask-aegis-ptt"]');
-  await p2.waitForFunction(() => /permission denied|unavailable/i.test(document.querySelector('[data-testid="ask-aegis-banner"]')?.innerText ?? ""), { timeout: 5000 });
-  await p2.type('[data-testid="ask-aegis-input"]', "What's our situation?");
-  await p2.click('[data-testid="ask-aegis-send"]');
-  await p2.waitForSelector('[data-testid="ask-aegis-turn"]', { timeout: 20000 });
-  ok("Mic denied: 'Microphone permission denied…' note shown; typed question still answered");
-  await ctx.close();
+  // 6. Microphone denied → recovery steps, typed input still works (only reachable when speech is on).
+  if (speech) {
+    const ctx = await browser.createBrowserContext();
+    const p2 = await ctx.newPage();
+    await p2.setViewport({ width: 1366, height: 768 });
+    await p2.evaluateOnNewDocument(() => {
+      navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException("Permission denied", "NotAllowedError"));
+    });
+    await p2.goto(`${BASE}/command`, { waitUntil: "networkidle0" });
+    await p2.waitForFunction(() => document.querySelector('[data-testid="ask-aegis-ptt"]')?.dataset.mic === "ready", { timeout: 10000 });
+    await p2.click('[data-testid="ask-aegis-ptt"]');
+    await p2.waitForFunction(() => /allow Microphone/.test(document.querySelector('[data-testid="ask-aegis-banner"]')?.innerText ?? ""), { timeout: 5000 });
+    await p2.type('[data-testid="ask-aegis-input"]', "What's our situation?");
+    await p2.click('[data-testid="ask-aegis-send"]');
+    await p2.waitForSelector('[data-testid="ask-aegis-turn"]', { timeout: 20000 });
+    ok("Mic denied: recovery steps ('allow Microphone…') shown; typed question still answered");
+    await ctx.close();
+  } else ok("Mic denial: not reachable on a text-only host (mic is off before any permission prompt)");
+
+  // 6b. Voice service offline → clear state + Retry; recovers when it's back.
+  {
+    const p3 = await browser.newPage();
+    await p3.setViewport({ width: 1366, height: 768 });
+    await p3.setRequestInterception(true);
+    let block = true;
+    p3.on("request", (r) => (block && r.url().includes("/aegis-voice/") ? r.abort() : r.continue()));
+    await p3.goto(`${BASE}/command`, { waitUntil: "networkidle0" });
+    await p3.waitForFunction(() => /VOICE OFFLINE/.test(document.querySelector('[data-testid="ask-aegis-status"]').textContent), { timeout: 10000 });
+    await p3.click('[aria-label="Expand Ask AEGIS panel"]');
+    await p3.type('[data-testid="ask-aegis-input"]', "What's our situation?");
+    await p3.click('[data-testid="ask-aegis-send"]');
+    await p3.waitForSelector('[data-testid="ask-aegis-retry"]', { timeout: 5000 });
+    if (!/Command Center is unaffected/.test(await p3.$eval('[data-testid="ask-aegis-banner"]', (e) => e.innerText))) fail("offline banner wording");
+    block = false;
+    await p3.click('[data-testid="ask-aegis-retry"]');
+    await p3.waitForFunction(() => !/OFFLINE/.test(document.querySelector('[data-testid="ask-aegis-status"]').textContent), { timeout: 5000 });
+    ok("Voice service offline: VOICE OFFLINE status, explanation + Retry; Retry recovers when it's back");
+    await p3.close();
+  }
+
+  // 6c. Plain-HTTP LAN page (teammates on the hotspot): mic explains the HTTPS/localhost fix.
+  if (LAN_BASE) {
+    const p4 = await browser.newPage();
+    await p4.setViewport({ width: 1366, height: 768 });
+    await p4.goto(`${LAN_BASE}/command`, { waitUntil: "networkidle0" });
+    await p4.waitForFunction(() => document.querySelector('[data-testid="ask-aegis-ptt"]')?.dataset.mic === "insecure", { timeout: 10000 });
+    await p4.click('[data-testid="ask-aegis-ptt"]');
+    await p4.waitForFunction(() => /localhost/.test(document.querySelector('[data-testid="ask-aegis-banner"]')?.innerText ?? ""), { timeout: 5000 });
+    await p4.type('[data-testid="ask-aegis-input"]', "Where is Responder Alpha?");
+    await p4.click('[data-testid="ask-aegis-send"]');
+    await p4.waitForSelector('[data-testid="ask-aegis-turn"]', { timeout: 20000 });
+    ok(`Plain-HTTP LAN page (${LAN_BASE}): 🎙 Mic off explains localhost/HTTPS; typed question answered`);
+    await p4.close();
+  } else ok("Plain-HTTP LAN check skipped (set LAN_BASE to run it)");
 
   // 7. Light theme.
   await page.evaluate(() => localStorage.setItem("aegis.theme", "light"));

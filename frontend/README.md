@@ -53,6 +53,7 @@ The operator at the command center watches the scene and relays guidance to fire
 | Scene map | Victims (priority colour; UNASSESSED = dashed "?"), firefighters, walls/grid, proposed vs dispatched A* routes, previous plan (dotted) after a replan, CV detections, optional floor-plan image | **Block route** (B) toggles cells → `PUT /map`; **Mark** (M) then click → `PATCH /responders/{id}` position |
 | Bodycam grid | One tile per firefighter + building camera + spare; target and task status overlay | Click a tile (or 1–9) to select that firefighter; per-tile source; 🔇/🔊 to hear the firefighter |
 | Comms | Selected firefighter's availability, voice link, quick commands, turn-by-turn directions from the A* route, comms log | Hold to talk (button or Space); spoken commands/messages; availability → `PATCH /responders/{id}` |
+| Ask AEGIS (above Comms) | Read-only assistant answering questions **about** the incident from live simulation data; capability line (typed / voice input / spoken answers) | Type or 🎙 Ask; Stop / ▶ Play / mute spoken answers. Never approves, dispatches or changes anything; not a radio to responders |
 | Victim strip | Totals (priorities, unassessed, blood seen, pulse known); per victim: human priority, pulse, operator observations, top camera signs, task | Card → editor: priority → `POST /assessment`; bleeding/wound/breathing/notes/reported pulse; full camera signs with confidence + age. Unconfirmed detections → **Confirm new victim** / **Link** (`POST /associations`) |
 | Command dock | Recommendation, expiry, **what changed since the previous revision**, tasks with ack source (**via device** vs **simulated**), device status | Approve exact revision (A) → `POST /decision`; separate **Dispatch** (D) → `POST /dispatches`; ↻ replan; details › |
 | Details drawer (L) | Full recommendation + grounded explanation, task progress with SIMULATE rehearsal controls, incident timeline | — |
@@ -77,6 +78,27 @@ The operator at the command center watches the scene and relays guidance to fire
   firefighter, paired to this computer). Muted unless the talk button/Space is held.
 - Quick commands and directions use speech synthesis on the **system default output**.
 - Directions are map-relative (north = up); responder heading isn't tracked.
+
+### Ask AEGIS (voice assistant)
+
+Served by the standalone read-only Voice service (`voice/`, port 8010) through the dashboard's
+`/aegis-voice/*` proxy. The panel shows what works on this browser before anything is pressed:
+
+| Capability | Needs | If missing, the panel says |
+| --- | --- | --- |
+| Typed questions | Voice service reachable (`/aegis-voice/health`) | `VOICE OFFLINE` + Retry; the rest of the dashboard is unaffected |
+| Voice input (🎙) | Secure page (**https://** or **localhost**), a browser that records, and speech-to-text on the voice host | `Mic blocked: needs HTTPS or localhost` (plain-http LAN page), or `Voice input off: speech not configured` |
+| Spoken answers | ElevenLabs configured on the voice host | `Spoken answers off (text only)` |
+
+- ElevenLabs credentials live only in the git-ignored `voice/.env` on the voice host — never in the
+  browser or a `NEXT_PUBLIC_*` variable. Check: `uv run python -m voice.cli --check-elevenlabs`.
+- Teammates on `http://<host-ip>:3000` can type questions but the browser blocks their microphone;
+  use the host laptop at `http://localhost:3000/command` or an HTTPS (Tailscale Serve) address.
+- Recording auto-sends at the service limit (20 s); Esc or ✕ cancels without sending; leaving the
+  page stops the microphone and never sends.
+- Tests: `node scripts/e2e-ask-aegis.mjs` (`LAN_BASE=http://<lan-ip>:3000` adds the plain-http
+  check). Without an ElevenLabs key, speech paths can be exercised with the clearly labelled test
+  stub `scripts/mock-voice-speech.mjs` (fixed transcript, silent audio, real grounded answers).
 
 ### Preview data and fallback
 
