@@ -43,6 +43,17 @@ def _angle_from_vertical(dx: float, dy: float) -> float:
     return math.degrees(math.atan2(abs(dx), abs(dy)))
 
 
+def _head_up(keypoints, keypoint_conf, min_conf: float) -> bool:
+    """Nose above level shoulders by a third of the shoulder width: an upright upper body."""
+    nose, left, right = 0, *SHOULDERS
+    if min(keypoint_conf[nose], keypoint_conf[left], keypoint_conf[right]) < min_conf:
+        return False
+    (nx, ny), (lx, ly), (rx, ry) = (keypoints[i] for i in (nose, left, right))
+    width = math.hypot(lx - rx, ly - ry)
+    level = abs(ly - ry) <= 0.35 * width
+    return width > 0 and level and (ly + ry) / 2 - ny >= width / 3
+
+
 def classify_posture(bbox, keypoints=None, keypoint_conf=None, *, min_conf: float = 0.5,
                      to_floor: FloorMapper | None = None,
                      lying_max_torso_m: float = 0.75) -> PostureEstimate:
@@ -87,6 +98,10 @@ def classify_posture(bbox, keypoints=None, keypoint_conf=None, *, min_conf: floa
                     return PostureEstimate("standing", 0.5, "torso_angle_aspect")
                 return PostureEstimate("sitting", 0.4, "torso_angle_aspect")
             return PostureEstimate("unknown", 0.3, "torso_angle_ambiguous")
+        if shoulders and not hips and _head_up(keypoints, keypoint_conf, min_conf):
+            # Head and shoulders close up, hips out of the picture: the box is wide, but
+            # the upper body is upright, so its shape says nothing about lying.
+            return PostureEstimate("unknown", 0.2, "upper_body_only")
 
     if aspect <= 0.75:
         return PostureEstimate("lying", 0.45, "bbox_aspect")
