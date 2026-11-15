@@ -4,13 +4,27 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { responderName } from "@/lib/format";
 import { assessMediaSupport, readMediaEnvironment } from "@/lib/mediaCapabilities";
-import { MIC, POLL_MS, fetchRtcConfig, responderStep, talkApi, talkErrorText, waitForIce } from "@/lib/talk";
+import {
+  MIC,
+  POLL_MS,
+  RING_TIMEOUT_MS,
+  fetchRtcConfig,
+  isTalkAuthError,
+  phoneTokenKey,
+  readToken,
+  responderStep,
+  takeTokenFromUrl,
+  talkApi,
+  talkErrorText,
+  waitForIce,
+  writeToken,
+} from "@/lib/talk";
 import type { SimulationState } from "@/lib/types";
 
 type Phase = "pick" | "ready" | "waiting" | "connecting" | "talking";
 
-const talk = talkApi();
 const SAVED = "aegis.phone.responder";
+const LINK_EXPIRED = "This link has expired or was revoked. Ask the operator for a new one.";
 
 type WakeLockSentinelLike = { release: () => Promise<void> };
 type WakeLockNavigator = Navigator & { wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinelLike> } };
@@ -34,19 +48,54 @@ export default function ResponderPhonePage() {
   const sessionRef = useRef<string | null>(null);
   const wakeRef = useRef<WakeLockSentinelLike | null>(null);
   const joinedRef = useRef(false);
+  // This phone's credential for the responder channel (from the operator's link), per channel, this tab only.
+  const tokenRef = useRef<string | null>(null);
+  const [hasToken, setHasToken] = useState(false);
+  const [expired, setExpired] = useState(false);
+  // Informational line that survives heartbeats (errors are cleared by the next successful one).
+  const [info, setInfo] = useState<string | null>(null);
+  const talk = useRef(talkApi(undefined, () => tokenRef.current)).current;
+  // Calls that never connected (e.g. the operator's browser vanished mid-ring): don't answer them again.
+  const declinedRef = useRef<Set<string>>(new Set());
+  const connectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setSecure(assessMediaSupport(readMediaEnvironment()).kind === "none");
     const fromUrl = new URLSearchParams(window.location.search).get("id");
     const id = fromUrl || window.localStorage.getItem(SAVED);
+    // The link carries the token in its #fragment: keep it in sessionStorage and remove it from the address bar.
+    const { token, cleaned } = takeTokenFromUrl(window.location.href);
+    if (token && id) {
+      writeToken(window.sessionStorage, phoneTokenKey(id), token);
+      window.history.replaceState(null, "", cleaned);
+    }
+    const onHash = () => {
+      const cur = new URLSearchParams(window.location.search).get("id");
+      const t = takeTokenFromUrl(window.location.href);
+      if (!t.token || !cur) return;
+      writeToken(window.sessionStorage, phoneTokenKey(cur), t.token);
+      window.history.replaceState(null, "", t.cleaned);
+      tokenRef.current = t.token;
+      setHasToken(true);
+      setExpired(false);
+      setError(null);
+      setResponderId(cur);
+      setPhase((p) => (p === "pick" ? "ready" : p));
+    };
+    window.addEventListener("hashchange", onHash);
     if (id) {
+      tokenRef.current = readToken(window.sessionStorage, phoneTokenKey(id));
+      setHasToken(!!tokenRef.current);
       setResponderId(id);
       setPhase("ready");
     }
     api.state().then(setState).catch(() => setState(null));
+    return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
   const closeCall = useCallback(() => {
+    if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
+    connectTimerRef.current = null;
     pcRef.current?.close();
     pcRef.current = null;
     sessionRef.current = null;
@@ -72,10 +121,20 @@ export default function ResponderPhonePage() {
       setPhase("connecting");
       const mic = micRef.current;
       if (!mic) return;
-      const config = await fetchRtcConfig();
+      const config = await fetchRtcConfig(undefined, tokenRef.current);
       if (sessionRef.current !== sessionId) return;
       const pc = new RTCPeerConnection(config);
       pcRef.current = pc;
+      // A call that doesn't connect in time (stale offer, operator gone, no network path) is hung up
+      // and not answered again, so the phone never sits on "Operator calling…" forever.
+      if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
+      connectTimerRef.current = setTimeout(() => {
+        if (pcRef.current !== pc || pc.connectionState === "connected") return;
+        declinedRef.current.add(sessionId);
+        void talk.hangup(channel, sessionId, "responder").catch(() => {});
+        setInfo("The operator's call didn't connect. You're still connected — the operator can call again.");
+        closeCall();
+      }, RING_TIMEOUT_MS);
       mic.getAudioTracks().forEach((t) => pc.addTrack(t, mic));
       pc.ontrack = (e) => {
         if (!audioRef.current) return;
@@ -84,9 +143,18 @@ export default function ResponderPhonePage() {
       };
       pc.onconnectionstatechange = () => {
         if (pcRef.current !== pc) return;
-        if (pc.connectionState === "connected") setPhase("talking");
+        if (pc.connectionState === "connected") {
+          if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
+          connectTimerRef.current = null;
+          setError(null);
+          setInfo(null);
+          setPhase("talking");
+        }
         else if (pc.connectionState === "failed") {
-          setError("Audio couldn't connect. Is this phone on the AEGIS network (hotspot or Tailscale)?");
+          // Tell the relay too, so the call doesn't stay "connected" there, and don't answer it again.
+          declinedRef.current.add(sessionId);
+          void talk.hangup(channel, sessionId, "responder").catch(() => {});
+          setInfo("Audio couldn't connect. Is this phone on the AEGIS network (hotspot or Tailscale)? You're still connected — the operator can call again.");
           closeCall();
         }
       };
@@ -96,7 +164,7 @@ export default function ResponderPhonePage() {
       if (pcRef.current !== pc) return;
       await talk.answer(channel, sessionId, pc.localDescription?.sdp ?? "");
     },
-    [closeCall],
+    [closeCall, talk],
   );
 
   // Heartbeat while joined: tells the dashboard this phone is ready and picks up calls.
@@ -112,10 +180,18 @@ export default function ResponderPhonePage() {
         if (stopped) return;
         setError(null);
         const step = responderStep(sessionRef.current, view);
-        if (step === "answer" && view.session?.offer) await answer(responderId, view.session.session_id, view.session.offer);
+        if (step === "answer" && view.session?.offer && !declinedRef.current.has(view.session.session_id))
+          await answer(responderId, view.session.session_id, view.session.offer);
         else if (step === "close") closeCall();
       } catch (e) {
-        if (!stopped) setError(talkErrorText(e));
+        if (stopped) return;
+        if (isTalkAuthError(e) && (e.kind === "signin" || e.kind === "forbidden")) {
+          stopped = true;
+          clearInterval(t);
+          signedOut();
+          return;
+        }
+        setError(talkErrorText(e));
       } finally {
         busy = false;
       }
@@ -126,7 +202,7 @@ export default function ResponderPhonePage() {
       stopped = true;
       clearInterval(t);
     };
-  }, [responderId, joined, answer, closeCall]);
+  }, [responderId, joined, answer, closeCall]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const again = () => {
@@ -136,18 +212,26 @@ export default function ResponderPhonePage() {
     return () => document.removeEventListener("visibilitychange", again);
   }, [keepAwake]);
 
-  useEffect(
-    () => () => {
+  // Closing the page or leaving: hang up (keepalive survives the unload) and release the microphone.
+  useEffect(() => {
+    const release = () => {
+      const s = sessionRef.current;
+      if (responderId && s) void talk.hangup(responderId, s, "responder", true).catch(() => {});
       pcRef.current?.close();
       micRef.current?.getTracks().forEach((t) => t.stop());
       void wakeRef.current?.release().catch(() => {});
-    },
-    [],
-  );
+    };
+    window.addEventListener("pagehide", release);
+    return () => {
+      window.removeEventListener("pagehide", release);
+      release();
+    };
+  }, [responderId, talk]);
 
   const join = async () => {
     if (!responderId) return;
     setError(null);
+    setInfo(null);
     try {
       micRef.current = await navigator.mediaDevices.getUserMedia({ audio: MIC });
       window.localStorage.setItem(SAVED, responderId);
@@ -159,6 +243,24 @@ export default function ResponderPhonePage() {
       setError(talkErrorText(e));
     }
   };
+
+  /** The operator revoked this phone or the link expired: stop, release everything, explain. */
+  function signedOut() {
+    if (responderId) writeToken(window.sessionStorage, phoneTokenKey(responderId), null);
+    tokenRef.current = null;
+    setHasToken(false);
+    setExpired(true);
+    joinedRef.current = false;
+    setJoined(false);
+    closeCall();
+    micRef.current?.getTracks().forEach((t) => t.stop());
+    micRef.current = null;
+    void wakeRef.current?.release().catch(() => {});
+    wakeRef.current = null;
+    setMuted(false);
+    setPhase("ready");
+    setError(LINK_EXPIRED);
+  }
 
   const leave = () => {
     const session = sessionRef.current;
@@ -187,7 +289,7 @@ export default function ResponderPhonePage() {
     ready: { text: "Tap Join to connect to the operator", color: "var(--muted)" },
     waiting: { text: "Connected · the operator can talk to you", color: "var(--accent)" },
     connecting: { text: "Operator calling…", color: "var(--warn)" },
-    talking: { text: "● Talking with the operator", color: "var(--accent)" },
+    talking: { text: muted ? "● Talking with the operator · you're muted" : "● Talking with the operator", color: "var(--accent)" },
   };
 
   return (
@@ -212,6 +314,8 @@ export default function ResponderPhonePage() {
             <button
               key={r.id}
               onClick={() => {
+                tokenRef.current = readToken(window.sessionStorage, phoneTokenKey(r.id));
+                setHasToken(!!tokenRef.current);
                 setResponderId(r.id);
                 setPhase("ready");
               }}
@@ -231,30 +335,52 @@ export default function ResponderPhonePage() {
               </button>
             )}
           </div>
-          <p className="text-lg font-semibold" style={{ color: status[phase].color }}>
+          <p className="text-lg font-semibold" style={{ color: status[phase].color }} data-testid="phone-status" data-phase={phase}>
             {status[phase].text}
           </p>
 
           {phase === "ready" ? (
-            <button onClick={join} disabled={!secure} className="rounded-2xl bg-accent py-8 text-2xl font-bold text-black disabled:opacity-40">
-              Join
-            </button>
+            <>
+              <button
+                onClick={join}
+                disabled={!secure || !hasToken}
+                data-testid="phone-join"
+                className="rounded-2xl bg-accent py-8 text-2xl font-bold text-black disabled:opacity-40"
+              >
+                Join
+              </button>
+              {!hasToken && !expired && (
+                <p className="rounded border border-warn/60 p-3 text-sm leading-snug text-warn" data-testid="phone-needs-link">
+                  This phone isn&apos;t signed in for {name}. Ask the operator for your phone link (Comms → Get phone link) and open it here.
+                </p>
+              )}
+            </>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={toggleMute}
+                data-testid="phone-mute"
                 aria-pressed={muted}
                 className={`rounded-2xl border py-8 text-xl font-bold ${muted ? "border-warn bg-warn/20 text-warn" : "border-line-strong"}`}
               >
                 {muted ? "Unmute" : "Mute"}
               </button>
-              <button onClick={leave} className="rounded-2xl border border-danger py-8 text-xl font-bold text-danger">
+              <button onClick={leave} data-testid="phone-leave" className="rounded-2xl border border-danger py-8 text-xl font-bold text-danger">
                 Leave
               </button>
             </div>
           )}
 
-          {error && <p className="text-sm leading-snug text-danger">{error}</p>}
+          {info && (
+            <p className="text-sm leading-snug text-muted" data-testid="phone-info">
+              {info}
+            </p>
+          )}
+          {error && (
+            <p className="text-sm leading-snug text-danger" data-testid="phone-error">
+              {error}
+            </p>
+          )}
 
           <div className="mt-auto space-y-1 text-xs leading-snug text-faint">
             {phase !== "ready" && awake === false && (

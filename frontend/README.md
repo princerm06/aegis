@@ -85,6 +85,15 @@ The operator at the command center watches the scene and relays guidance to fire
   Both sides get their network settings from the backend (`/talk/ice-servers`), including an
   optional TURN relay for when the laptop and the phone can't reach each other directly
   (see backend/README.md, "Talk link").
+  **Sign-in (needs the backend's talk auth, PR #37):** the operator types the talk secret once in
+  Comms; it is kept in `sessionStorage` for that tab only — never in a `NEXT_PUBLIC_*` variable or
+  the proxy. **Get phone link** mints a per-responder link (`/responder?id=…#token=…`); the link
+  is the phone's credential, so it is hidden once the phone joins and **sign out phone** revokes
+  it. The phone page moves the token out of the address bar into `sessionStorage`. States shown:
+  sign-in required, not configured (503), phone ready / not connected, connecting, ringing,
+  connected (with mute), ended, and why a call failed. This is a call to a person — separate from
+  Ask AEGIS, which only answers questions. Test: `TALK_OPERATOR_TOKEN=… node scripts/e2e-talk.mjs`
+  (throwaway secret; two browser contexts with fake microphones).
 - Quick commands and directions use speech synthesis on the **system default output**.
 - Directions are map-relative (north = up); responder heading isn't tracked.
 
