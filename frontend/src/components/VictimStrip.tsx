@@ -3,7 +3,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FieldNote, Tri } from "@/lib/fieldNotes";
 import { SEVERITIES, SEVERITY_META, ageSeconds, humanize, responderName, shortId, trackLabel } from "@/lib/format";
-import { signLines, type SignLine } from "@/lib/insights";
+import { queueOrder, signLines, victimOrder, warningSigns, type SignLine } from "@/lib/insights";
 import type { SensorReading } from "@/lib/preview";
 import type { Casualty, Severity, SimulationProposal, SimulationState, TrackRecord } from "@/lib/types";
 import { Badge, Button } from "./ui";
@@ -34,20 +34,16 @@ const SIGN_TONE: Record<SignLine["tone"], string> = { attention: "text-warn", ne
 export function VictimStrip(props: Props) {
   const { state, note, sensor, selectedId, onSelect, now } = props;
   const cas = state.scenario.casualties;
-  const unlinked = state.tracks.filter((t) => !t.casualty_id);
+  const ordered = useMemo(() => victimOrder(state), [state]);
   const count = (s: Severity) => cas.filter((c) => c.medical_assessment?.severity === s).length;
   const unassessed = cas.filter((c) => !c.medical_assessment).length;
   const bleeding = cas.filter((c) => note(c.id).bleeding === "yes" || signsFor(state, c.id)?.signs.visible_blood?.value === "detected").length;
   const pulsed = cas.filter((c) => note(c.id).pulse || sensor(c.id)).length;
-  // Pending queue, freshest first. Display order only — nothing is auto-confirmed or discarded.
-  const queue = useMemo(
-    () =>
-      state.tracks
-        .filter((t) => !t.casualty_id)
-        .sort((a, b) => +new Date(b.latest_observation.observed_at) - +new Date(a.latest_observation.observed_at)),
-    [state.tracks],
-  );
+  // Pending queue: in view first, more camera warning signs first. Display order only — nothing is auto-confirmed or discarded.
+  const { current: queue, older } = useMemo(() => queueOrder(state.tracks, now), [state.tracks, now]);
+  const pending = queue.length + older.length;
   const [queueOpen, setQueueOpen] = useState(true);
+  const [olderOpen, setOlderOpen] = useState(false);
 
   const wrap = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -71,10 +67,15 @@ export function VictimStrip(props: Props) {
         <div>
           <div className="label !text-text">Victims</div>
           <div className="mono text-3xl font-semibold leading-none">{cas.length}</div>
-          {unlinked.length > 0 && (
+          {queue.length > 0 && (
             <button onClick={() => setQueueOpen((v) => !v)} className="text-[10.5px] text-warn hover:underline" title={queueOpen ? "Collapse observation queue" : "Expand observation queue"}>
-              +{unlinked.length} unconfirmed {queueOpen ? "▾" : "▸"}
+              +{queue.length} unconfirmed {queueOpen ? "▾" : "▸"}
             </button>
+          )}
+          {cas.length > 1 && (
+            <div className="mt-0.5 text-[9.5px] leading-tight text-faint" title="Camera signs are unvalidated measurements and never set priority.">
+              order: your priority, then camera warning signs
+            </div>
           )}
         </div>
         <div className="mono space-y-0.5 text-[10.5px]">
@@ -95,37 +96,45 @@ export function VictimStrip(props: Props) {
 
       {/* confirmed casualties — visual priority, horizontal scroll */}
       <div ref={scroller} className="scrollbar-thin flex min-w-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden p-2" aria-label="Confirmed victims">
-        {cas.map((c) => (
+        {ordered.map((c) => (
           <VictimCard key={c.id} c={c} {...props} />
         ))}
         {cas.length === 0 && <p className="self-center px-4 text-xs text-muted">No confirmed victims yet.</p>}
       </div>
 
       {/* pending CV observations — separate queue, vertical scroll, collapsible */}
-      {unlinked.length > 0 && queueOpen && (
+      {pending > 0 && queueOpen && (
         <div className="flex w-[252px] shrink-0 flex-col border-l border-line" aria-label="Pending observations">
           <div className="flex items-center gap-1.5 border-b border-line px-2 py-1">
             <span className="label !text-[9.5px] !text-warn">Observations</span>
-            <span className="mono text-[10px] text-warn">{unlinked.length} pending</span>
+            <span className="mono text-[10px] text-warn">{queue.length} in view</span>
             <button onClick={() => setQueueOpen(false)} className="mono ml-auto text-muted hover:text-text" aria-label="Collapse observation queue" title="Collapse">
               ›
             </button>
           </div>
           <div className="scrollbar-thin min-h-0 flex-1 space-y-1 overflow-y-auto p-1.5">
+            {queue.length > 1 && <p className="px-0.5 text-[9.5px] text-faint">More camera warning signs first · you set the priority</p>}
             {queue.map((t) => (
               <DetectionRow key={t.track_id} track={t} {...props} />
             ))}
+            {queue.length === 0 && <p className="px-0.5 text-[10px] text-muted">No one in view right now.</p>}
+            {older.length > 0 && (
+              <button onClick={() => setOlderOpen((v) => !v)} className="mono w-full px-0.5 pt-1 text-left text-[10px] text-faint hover:text-muted">
+                {olderOpen ? "▾" : "▸"} {older.length} older · out of view
+              </button>
+            )}
+            {olderOpen && older.map((t) => <DetectionRow key={t.track_id} track={t} {...props} />)}
           </div>
         </div>
       )}
-      {unlinked.length > 0 && !queueOpen && (
+      {pending > 0 && !queueOpen && (
         <button
           onClick={() => setQueueOpen(true)}
           className="flex w-8 shrink-0 flex-col items-center justify-center gap-1 border-l border-line text-warn hover:bg-panel-2"
-          aria-label={`Expand observation queue, ${unlinked.length} pending`}
+          aria-label={`Expand observation queue, ${queue.length} in view`}
           title="Expand observation queue"
         >
-          <span className="mono text-[11px] font-bold [writing-mode:vertical-rl]">OBS {unlinked.length}</span>
+          <span className="mono text-[11px] font-bold [writing-mode:vertical-rl]">OBS {queue.length}</span>
           <span className="mono text-[11px]">‹</span>
         </button>
       )}
@@ -149,6 +158,17 @@ function signsFor(state: SimulationState, cid: string) {
   const t = state.tracks.find((x) => x.casualty_id === cid);
   if (!t?.latest_visible_signs) return null;
   return { signs: t.latest_visible_signs, at: t.signs_observed_at ?? t.latest_observation.observed_at };
+}
+
+function WarningChip({ n }: { n: number }) {
+  return (
+    <span
+      className="mono shrink-0 rounded border border-warn/60 px-1 text-[9.5px] text-warn"
+      title={`${n} camera warning sign${n === 1 ? "" : "s"} — unvalidated measurements, never a priority. You set the priority.`}
+    >
+      ⚠ {n}
+    </span>
+  );
 }
 
 function PriorityBadge({ c }: { c: Casualty }) {
@@ -189,6 +209,7 @@ function VictimCard({ c, state, proposal, selectedId, onSelect, note, sensor, fl
   const track = state.tracks.find((t) => t.casualty_id === c.id);
   const sg = signsFor(state, c.id);
   const lines = sg ? signLines(sg.signs).sort((a, b) => (a.tone === "attention" ? -1 : 0) - (b.tone === "attention" ? -1 : 0)).slice(0, 2) : [];
+  const warningCount = warningSigns(sg?.signs).length;
   const task = state.assignments.find((a) => a.casualty_id === c.id && a.status !== "completed");
   const proposed =
     proposal && (proposal.status === "pending_approval" || proposal.status === "approved")
@@ -214,7 +235,8 @@ function VictimCard({ c, state, proposal, selectedId, onSelect, note, sensor, fl
             ◉ {camAge > STALE_S ? `stale ${camAge}s` : `${Math.round(track!.latest_observation.confidence * 100)}%`}
           </span>
         )}
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-1">
+          {warningCount > 0 && <WarningChip n={warningCount} />}
           <PriorityBadge c={c} />
         </span>
       </div>
@@ -404,6 +426,7 @@ function DetectionRow({ track, state, busy, now, selectedId, onSelect, onAssocia
   const age = ageSeconds(track.latest_observation.observed_at, now);
   const stale = age > STALE_S;
   const conf = Math.round(track.latest_observation.confidence * 100);
+  const warnings = warningSigns(track.latest_visible_signs);
   const nextId = () => {
     const nums = state.scenario.casualties.map((c) => Number(c.id.match(/(\d+)$/)?.[1] ?? 0));
     return `casualty-${String(Math.max(0, ...nums) + 1).padStart(3, "0")}`;
@@ -418,10 +441,21 @@ function DetectionRow({ track, state, busy, now, selectedId, onSelect, onAssocia
     >
       <div className="flex min-w-0 items-center gap-1.5">
         <span className="mono min-w-0 flex-1 truncate text-[11.5px] font-semibold text-warn">{trackLabel(track)}</span>
+        {warnings.length > 0 && <WarningChip n={warnings.length} />}
         <span className={`mono shrink-0 text-[10px] ${stale ? "text-warn" : "text-accent"}`}>
           {conf}% · {age}s{stale ? " STALE" : ""}
         </span>
       </div>
+      <ul className="mt-0.5">
+        {warnings.slice(0, 2).map((l) => (
+          <li key={l.key} className={`truncate text-[10px] ${SIGN_TONE[l.tone]}`}>
+            cam: {l.text}
+          </li>
+        ))}
+        {warnings.length === 0 && (
+          <li className="text-[10px] text-faint">{track.latest_visible_signs ? "cam: no warning signs seen" : "cam: no signs yet"}</li>
+        )}
+      </ul>
       <div className="mt-1 flex gap-1" onClick={(e) => e.stopPropagation()}>
         <Button size="sm" variant="warn" disabled={busy} onClick={() => onAssociate(track.track_id, nextId(), true)} title="Confirm as a new victim">
           Confirm
