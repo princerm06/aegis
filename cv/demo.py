@@ -45,7 +45,8 @@ class Feed:
         return f"http://{host}:{self.port}/stream.mjpg"
 
 
-LAN_STREAM = ["--stream-fps", "5", "--stream-quality", "60", "--stream-width", "640"]   # fits a hotspot
+# About 10 KB a frame: on the venue hotspot 640 px frames (22 KB) backed up at 5 fps.
+LAN_STREAM = ["--stream-fps", "10", "--stream-quality", "45", "--stream-width", "480"]
 
 FIXED = Feed("Fixed camera", "demo.yaml", 8090, "BUILDING CAM")
 BODYCAM = Feed("Body cam", "bodycam.yaml", 8091, "ALPHA · BODYCAM")

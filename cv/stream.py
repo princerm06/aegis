@@ -13,6 +13,7 @@ private network). Frames are encoded only while someone is watching.
 from __future__ import annotations
 
 import logging
+import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,6 +22,7 @@ import cv2
 
 log = logging.getLogger("cv.stream")
 BOUNDARY = "aegisframe"
+REMOTE_SEND_BUFFER = 24 * 1024
 PAGE = (b"<!doctype html><title>AEGIS CV</title><body style='margin:0;background:#111'>"
         b"<img src='/stream.mjpg' style='width:100%'></body>")
 
@@ -150,6 +152,9 @@ class FrameStream:
         handler.send_header("Cache-Control", "no-store")
         handler.send_header("Access-Control-Allow-Origin", "*")
         handler.end_headers()
+        if handler.client_address[0] != "127.0.0.1":
+            # A slow network fills the default buffer with seconds of old frames; keep about two.
+            handler.connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, REMOTE_SEND_BUFFER)
         self._watch(1)
         seen = self._frame_id - 1 if self._jpeg is not None else 0
         try:
