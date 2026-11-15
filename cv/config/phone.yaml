@@ -10,7 +10,8 @@
 # scripts/live_demo.py --prepare-only: phone-1, zone-b = (3, 2).
 
 camera:
-  index: 2                  # Continuity Camera; the order changes, check with the ffmpeg list in cv/README.md
+  name: iPhone              # Continuity Camera, matched by model whatever the phone is called
+  index: 2
   width: 1280
   height: 720
   fps: 30

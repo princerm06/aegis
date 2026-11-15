@@ -1,7 +1,10 @@
 """Webcam or video-file frame source that never raises in the video loop.
 
 A live camera that stops delivering frames is released and reopened every
-``retry_interval_s``; ``read()`` returns ``None`` meanwhile. A file source is
+``retry_interval_s``; ``read()`` returns ``None`` meanwhile. With
+``camera.name`` set, the index is looked up by name on every open, so macOS
+renumbering cameras (plugging one in, Continuity Camera waking up) cannot
+switch to the wrong one; if no camera has that name, it keeps retrying. A file source is
 paced to its FPS by default (``fps_override``, e.g. the measured FPS from a
 recording's sidecar, wins over the container value) so time-based logic behaves
 as it would live. ``loop`` restarts a file at its end, keeping the pacing continuous.
@@ -12,8 +15,8 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from dataclasses import dataclass
-from typing import Any, Callable
+from dataclasses import dataclass, replace
+from typing import Any, Callable, Sequence
 
 from cv.settings import CameraSettings
 
@@ -27,13 +30,74 @@ class Frame:
     index: int
 
 
+def list_cameras() -> list[tuple[str, str]] | None:
+    """(name, model) of each camera in OpenCV's index order, or None where that order is unknown.
+
+    OpenCV's AVFoundation backend numbers cameras sorted by unique ID, not in
+    the order ``devicesWithMediaType`` lists them: with a C922, an iPhone and
+    the built-in camera, the listed order put the iPhone at the C922's index.
+    ffmpeg's ``-list_devices`` uses yet another order (built-in first), so it
+    must not be used to pick an index either.
+    """
+    if sys.platform != "darwin":
+        return None
+    try:
+        import AVFoundation
+    except ImportError:
+        return None
+    devices = AVFoundation.AVCaptureDevice.devicesWithMediaType_(AVFoundation.AVMediaTypeVideo)
+    devices = sorted(devices, key=lambda device: str(device.uniqueID()))
+    return [(str(device.localizedName()), str(device.modelID() or "")) for device in devices]
+
+
+def find_camera(name: str, cameras: Sequence[tuple[str, str]]) -> int | None:
+    """Index of the first camera whose name or model contains ``name`` (any case).
+
+    Models make ``iPhone`` match a Continuity Camera whatever the phone is called.
+    """
+    wanted = name.casefold()
+    return next((i for i, (label, model) in enumerate(cameras)
+                 if wanted in label.casefold() or wanted in model.casefold()), None)
+
+
+def rotate(image, degrees: int):
+    """Turn a frame clockwise by 90, 180 or 270 degrees (a camera mounted sideways or upside down)."""
+    import cv2
+
+    codes = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
+    if degrees % 360 not in codes:
+        raise ValueError(f"camera.rotate must be 0, 90, 180 or 270, not {degrees}")
+    return cv2.rotate(image, codes[degrees % 360])
+
+
+def camera_override(settings: CameraSettings, value: str | None) -> CameraSettings:
+    """``--camera 1`` picks an index, ``--camera C922`` a name."""
+    if value is None:
+        return settings
+    value = value.strip()
+    if value.isdigit():
+        return replace(settings, index=int(value), name="")
+    return replace(settings, name=value)
+
+
+def describe_cameras(cameras: Sequence[tuple[str, str]] | None) -> str:
+    if cameras is None:
+        return "camera names are not available here (macOS with pyobjc-framework-AVFoundation only)"
+    return ", ".join(f"{i}: {label}" for i, (label, _) in enumerate(cameras)) or "no cameras connected"
+
+
 class Camera:
     def __init__(self, settings: CameraSettings, source: str | None = None, *, pace: bool = True,
                  clock: Callable[[], float] = time.monotonic,
                  sleep: Callable[[float], None] = time.sleep,
                  opener: Callable[[], Any] | None = None,
-                 fps_override: float | None = None, loop: bool = False):
+                 fps_override: float | None = None, loop: bool = False,
+                 lister: Callable[[], list[tuple[str, str]] | None] = list_cameras):
         self.settings = settings
+        self._lister = lister
+        self.device_index: int | None = None if settings.name else settings.index
+        self.device_name: str | None = None
+        self._missing_report: str | None = None
         self.source = source
         self.pace = pace
         self.fps_override = fps_override
@@ -55,7 +119,37 @@ class Camera:
 
     @property
     def label(self) -> str:
-        return self.source or f"camera:{self.settings.index}"
+        if self.source:
+            return self.source
+        if self.device_name:
+            return f"camera:{self.device_index} ({self.device_name})"
+        return f"camera:{self.settings.name or self.settings.index}"
+
+    def resolve_index(self) -> int | None:
+        """The index to open: by name when ``camera.name`` is set, else the configured index."""
+        if not self.settings.name:
+            return self.settings.index
+        names = self._lister()
+        if names is None:
+            if self._missing_report != "unlisted":
+                log.warning("Cannot list cameras by name here; using index %d for %r",
+                            self.settings.index, self.settings.name)
+                self._missing_report = "unlisted"
+            self.device_index, self.device_name = self.settings.index, None
+            return self.settings.index
+        index = find_camera(self.settings.name, names)
+        if index is None:
+            report = describe_cameras(names)
+            if report != self._missing_report:
+                log.warning("No camera named %r yet; connected: %s", self.settings.name, report)
+                self._missing_report = report
+            return None
+        label = names[index][0]
+        if (index, label) != (self.device_index, self.device_name):
+            log.info("Camera %r is index %d (%s)", self.settings.name, index, label)
+        self._missing_report = None
+        self.device_index, self.device_name = index, label
+        return index
 
     @property
     def is_file(self) -> bool:
@@ -74,8 +168,11 @@ class Camera:
 
         if self.source:
             return cv2.VideoCapture(self.source)
+        index = self.resolve_index()
+        if index is None:
+            return None
         backend = cv2.CAP_AVFOUNDATION if sys.platform == "darwin" else cv2.CAP_ANY
-        capture = cv2.VideoCapture(self.settings.index, backend)
+        capture = cv2.VideoCapture(index, backend)
         capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.settings.width)
         capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.settings.height)
@@ -134,6 +231,8 @@ class Camera:
         now = self._clock()
         if ok and image is not None:
             self._failing_since = None
+            if not self.is_file and self.settings.rotate:
+                image = rotate(image, self.settings.rotate)
             self.resolution = (int(image.shape[1]), int(image.shape[0]))
             if self.is_file and self.pace:
                 if self._file_start is None:

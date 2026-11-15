@@ -1,0 +1,256 @@
+{
+  "run_at_utc": "2026-11-14T18:13:14.656Z",
+  "clips": [
+    {
+      "name": "eyes-open-closed-20261114T175138Z",
+      "origin": "take eyes-open-closed",
+      "source": "eyes-open-closed-20261114T175138Z.mp4",
+      "duration_s": 41.4,
+      "people": 2,
+      "checks": [
+        {
+          "check": "eyes open at 5-20 s",
+          "samples": 57,
+          "testable": 0.51,
+          "score": 0.0
+        },
+        {
+          "check": "eyes closed from 27 s",
+          "samples": 54,
+          "testable": 0.48,
+          "score": 0.278
+        }
+      ]
+    },
+    {
+      "name": "face-down-20261114T175424Z",
+      "origin": "take face-down",
+      "source": "face-down-20261114T175424Z.mp4",
+      "duration_s": 44.1,
+      "people": 2,
+      "checks": [
+        {
+          "check": "face_down seen at 8-24 s",
+          "samples": 60,
+          "testable": 0.92,
+          "score": 0.0
+        },
+        {
+          "check": "face_down never seen from 32 s",
+          "samples": 46,
+          "testable": 1.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "fall-to-mat-20261114T174912Z",
+      "origin": "take fall-to-mat",
+      "source": "fall-to-mat-20261114T174912Z.mp4",
+      "duration_s": 34.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "fall seen from 22 s",
+          "samples": 46,
+          "testable": 1.0,
+          "score": 0.0
+        },
+        {
+          "check": "fall never seen at 0-14 s",
+          "samples": 53,
+          "testable": 1.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "fall-to-mat-20261114T175000Z",
+      "origin": "take fall-to-mat",
+      "source": "fall-to-mat-20261114T175000Z.mp4",
+      "duration_s": 34.0,
+      "people": 1,
+      "checks": [
+        {
+          "check": "fall seen from 22 s",
+          "samples": 45,
+          "testable": 1.0,
+          "score": 1.0
+        },
+        {
+          "check": "fall never seen at 0-14 s",
+          "samples": 54,
+          "testable": 1.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "lie-down-slowly-20261114T174818Z",
+      "origin": "take lie-down-slowly",
+      "source": "lie-down-slowly-20261114T174818Z.mp4",
+      "duration_s": 39.3,
+      "people": 2,
+      "checks": [
+        {
+          "check": "fall never seen",
+          "samples": 149,
+          "testable": 1.0,
+          "score": 0.47
+        }
+      ]
+    },
+    {
+      "name": "response-no-20261114T175330Z",
+      "origin": "take response-no",
+      "source": "response-no-20261114T175330Z.mp4",
+      "duration_s": 39.3,
+      "people": 2,
+      "checks": [
+        {
+          "check": "response no_response from 29 s",
+          "samples": 39,
+          "testable": 1.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "response-yes-20261114T175236Z",
+      "origin": "take response-yes",
+      "source": "response-yes-20261114T175236Z.mp4",
+      "duration_s": 39.2,
+      "people": 2,
+      "checks": [
+        {
+          "check": "response responded at 22-36 s",
+          "samples": 53,
+          "testable": 1.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "side-facing-away-20261114T175523Z",
+      "origin": "take side-facing-away",
+      "source": "side-facing-away-20261114T175523Z.mp4",
+      "duration_s": 30.1,
+      "people": 4,
+      "checks": [
+        {
+          "check": "face_down never seen",
+          "samples": 108,
+          "testable": 0.38,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "walk-20261114T174651Z",
+      "origin": "take walk",
+      "source": "walk-20261114T174651Z.mp4",
+      "duration_s": 29.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "walking seen from 16 s",
+          "samples": 51,
+          "testable": 1.0,
+          "score": 1.0
+        },
+        {
+          "check": "walking never seen at 0-7 s",
+          "samples": 27,
+          "testable": 0.41,
+          "score": 1.0
+        },
+        {
+          "check": "waving never seen",
+          "samples": 112,
+          "testable": 0.89,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "wave-20261114T174735Z",
+      "origin": "take wave",
+      "source": "wave-20261114T174735Z.mp4",
+      "duration_s": 29.6,
+      "people": 1,
+      "checks": [
+        {
+          "check": "waving seen from 18 s",
+          "samples": 42,
+          "testable": 1.0,
+          "score": 0.0
+        },
+        {
+          "check": "waving never seen at 0-11 s",
+          "samples": 40,
+          "testable": 0.72,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "wave-20261114T180729Z",
+      "origin": "take wave",
+      "source": "wave-20261114T180729Z.mp4",
+      "duration_s": 29.5,
+      "people": 0,
+      "checks": [
+        {
+          "check": "waving seen from 18 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "waving never seen at 0-11 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "wave-lying-20261114T175049Z",
+      "origin": "take wave-lying",
+      "source": "wave-lying-20261114T175049Z.mp4",
+      "duration_s": 34.2,
+      "people": 3,
+      "checks": [
+        {
+          "check": "waving seen from 21 s",
+          "samples": 50,
+          "testable": 1.0,
+          "score": 0.0
+        },
+        {
+          "check": "waving never seen at 0-14 s",
+          "samples": 54,
+          "testable": 0.78,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "wave-lying-20261114T180813Z",
+      "origin": "take wave-lying",
+      "source": "wave-lying-20261114T180813Z.mp4",
+      "duration_s": 34.5,
+      "people": 0,
+      "checks": [
+        {
+          "check": "waving seen from 21 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "waving never seen at 0-14 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    }
+  ]
+}

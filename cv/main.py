@@ -28,7 +28,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
-from cv.camera import Camera
+from cv.camera import Camera, camera_override, describe_cameras, list_cameras
 from cv.clock import Timebase, iso_utc, session_id
 from cv.homography import Calibration, CalibrationError
 from cv.publisher import HttpTransport, MockTransport, Publisher
@@ -39,12 +39,14 @@ from cv.zones import ZoneMap, parse_zones
 
 log = logging.getLogger("cv")
 WINDOW = "AEGIS CV (q / Esc to quit)"
+MEMORY_EVERY_S = 600.0
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="AEGIS CV pipeline")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="pipeline YAML")
-    parser.add_argument("--camera", type=int, help="camera index (overrides config)")
+    parser.add_argument("--camera", help="camera index or name, e.g. 0 or C922 (overrides config)")
+    parser.add_argument("--list-cameras", action="store_true", help="print camera indexes and names, then exit")
     parser.add_argument("--camera-id", help="backend camera ID, e.g. phone-1 (overrides config)")
     parser.add_argument("--source", help="video file to replay instead of the camera")
     parser.add_argument("--loop", action="store_true", help="replay: restart the file at its end")
@@ -55,19 +57,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mock-backend", action="store_true", help="log JSON instead of sending it")
     parser.add_argument("--quiet-mock", action="store_true", help="mock mode: write the log file only")
     parser.add_argument("--no-display", action="store_true", help="no debug window")
+    parser.add_argument("--stream-port", type=int, default=0,
+                        help="serve the view as MJPEG on this port for the dashboard tile, e.g. 8090 (0 = off)")
+    parser.add_argument("--stream-host", default="127.0.0.1",
+                        help="stream address; 0.0.0.0 exposes the video to the network")
     parser.add_argument("--duration", type=float, default=0.0, help="stop after N seconds (0 = run)")
     parser.add_argument("--summary-json", help="also write the measured run summary to this file")
     parser.add_argument("--room", help="mapping.zone_select keys: starting room (default: the first zone)")
     parser.add_argument("--signs", action="store_true", help="observe signs (config: signs.enabled)")
     parser.add_argument("--send-signs", action="store_true",
                         help="include signs in reports (needs the backend change in CONTRACT_PROPOSAL.md)")
+    parser.add_argument("--send-history", action="store_true",
+                        help="with --send-signs, also send fall, walking, limbs, waving, face_down, "
+                             "person_nearby, blood_spread, changes (the default since backend PR #12)")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
 
 
 def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
-    if args.camera is not None:
-        settings = replace(settings, camera=replace(settings.camera, index=args.camera))
+    settings = replace(settings, camera=camera_override(settings.camera, args.camera))
     if args.model:
         settings = replace(settings, detector=replace(settings.detector, model=args.model))
     publisher = settings.publisher
@@ -80,6 +88,8 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
         signs = replace(signs, enabled=True)
     if getattr(args, "send_signs", False):
         publisher = replace(publisher, send_signs=True)
+    if getattr(args, "send_history", False):
+        publisher = replace(publisher, send_history=True)
     return replace(settings, publisher=publisher, signs=signs)
 
 
@@ -172,6 +182,7 @@ def run(args: argparse.Namespace) -> int:
         from cv.signs import SignsEstimator
 
         signs = SignsEstimator(settings.signs, timebase.iso, settings.tracking.keypoint_min_conf)
+        signs.prepare()
         log.info("Observing signs%s; press c in the window right after giving a spoken command",
                  " and sending them" if settings.publisher.send_signs else " (shown only, not sent)")
 
@@ -192,6 +203,14 @@ def run(args: argparse.Namespace) -> int:
             calibration_ref=base_calibration.calibration_ref if base_calibration else None,
             session_id=session, timebase=timebase, transport=transport, zones=zone_map)
         publisher.start()
+    global _marks
+    _marks = None
+    if publisher is not None and signs is not None and not args.mock_backend:
+        from cv.assignments import OperatorMarks
+
+        _marks = OperatorMarks(settings.publisher.base_url, settings.publisher.scenario_id,
+                               settings.publisher.camera_id)
+        _marks.start()
 
     log.info("Session %s | camera %s | model %s on %s | source %s", session,
              settings.publisher.camera_id, settings.detector.model, detector.device, camera.label)
@@ -209,6 +228,18 @@ def run(args: argparse.Namespace) -> int:
         import cv2
 
         cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+    stream = None
+    if args.stream_port:
+        from cv.stream import FrameStream
+
+        stream = FrameStream(args.stream_host, args.stream_port)
+        stream.start()
+
+    def mark_command(now: float, source: str) -> None:
+        if signs is None:
+            return
+        signs.mark_command(now)
+        log.info("Command marked (%s): watching for responses for %.0f s", source, settings.signs.command_window_s)
 
     started = timebase.now()
     run_at = iso_utc(timebase.to_wall(started))
@@ -221,6 +252,8 @@ def run(args: argparse.Namespace) -> int:
     mapping_error = None
     mapping_ready = False
     checked_size = None
+    memory: list[list[float]] = []      # [minutes, peak MB]: a peak still rising hours in is a leak
+    next_memory = started
 
     try:
         while not stopping:
@@ -263,6 +296,12 @@ def run(args: argparse.Namespace) -> int:
                 tracks = tracker.update([], now)  # time passes: occluded / stale / lost
 
             now = timebase.now()
+            if now >= next_memory:
+                memory.append([round((now - started) / 60.0, 1), peak_memory_mb()])
+                next_memory += MEMORY_EVERY_S
+                if len(memory) > 1:
+                    log.info("Running %.0f min: %d frames, %d tracks alive, %d created, peak memory %.0f MB",
+                             memory[-1][0], frames, len(tracker.tracks), tracker.created_total, memory[-1][1])
             if publisher is not None and mapping_ready and now >= next_publish:
                 reports = tracker.reports(now)
                 if signs is not None:
@@ -272,17 +311,21 @@ def run(args: argparse.Namespace) -> int:
                 publisher.submit(reports, now)
                 next_publish = max(next_publish + publish_period, now - publish_period)
 
-            if not args.no_display and frame is not None:
-                key = show(frame.image, tracks, tracker, calibration, zone_map, camera, publisher,
-                           fps, detector, settings, args, mapping_error, signs, now, view)
+            if stream is not None and stream.take_commands():
+                mark_command(now, "dashboard")
+            showing = not args.no_display or (stream is not None and stream.watched)
+            if showing and frame is not None:
+                canvas = draw(frame.image, tracks, tracker, calibration, zone_map, camera, publisher,
+                              fps, detector, settings, args, mapping_error, signs, now, view)
+                if stream is not None:
+                    stream.publish(canvas, now)
+                key = 255 if args.no_display else show(canvas)
                 if key in (ord("q"), 27):
                     break
                 if key == ord("v") and signs is not None:
                     view = "debug" if view == "responder" else "responder"
-                if key == ord("c") and signs is not None:
-                    signs.mark_command(now)
-                    log.info("Command marked: watching for responses for %.0f s",
-                             settings.signs.command_window_s)
+                if key == ord("c"):
+                    mark_command(now, "key c")
                 room = room_for_key(key, zone_map) if pick_room else None
                 if room is not None and room != tracker.current_zone:
                     tracker.set_current_zone(room)
@@ -291,6 +334,10 @@ def run(args: argparse.Namespace) -> int:
         camera.release()
         if publisher is not None:
             publisher.stop()
+        if _marks is not None:
+            _marks.stop()
+        if stream is not None:
+            stream.stop()
         if not args.no_display:
             import cv2
 
@@ -298,6 +345,7 @@ def run(args: argparse.Namespace) -> int:
 
     summary = build_summary(run_at, frames, timebase.now() - started, inference_ms, tracker,
                             publisher, camera, settings, detector.device, calibration, zone_map)
+    summary["memory_peak_mb"] = memory + [[round((timebase.now() - started) / 60.0, 1), peak_memory_mb()]]
     print_summary(summary)
     if args.summary_json:
         path = Path(args.summary_json)
@@ -307,11 +355,9 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
-def show(image, tracks, tracker, calibration, zone_map, camera, publisher, fps, detector,
-         settings, args, mapping_error, signs=None, now: float = 0.0, view: str = "debug") -> int:
-    """Draw the window (responder view or debug view); returns the key pressed (or 255)."""
-    import cv2
-
+def draw(image, tracks, tracker, calibration, zone_map, camera, publisher, fps, detector,
+         settings, args, mapping_error, signs=None, now: float = 0.0, view: str = "debug"):
+    """The responder view or the debug view, for the window and the stream."""
     pub = publisher.status() if publisher else None
     warnings = []
     if pub is not None and pub["backing_off"]:
@@ -321,10 +367,15 @@ def show(image, tracks, tracker, calibration, zone_map, camera, publisher, fps, 
     if camera.is_file:
         warnings.append("REPLAY (recorded clip)" + (f" loop {camera.loops}" if args.loop else ""))
     if view == "responder" and signs is not None:
-        canvas = responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs, now, warnings)
-    else:
-        canvas = debug_view(image, tracks, tracker, calibration, zone_map, camera, pub, fps, detector,
-                            settings, args, signs, now, warnings)
+        return responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs, now, warnings)
+    return debug_view(image, tracks, tracker, calibration, zone_map, camera, pub, fps, detector,
+                      settings, args, signs, now, warnings)
+
+
+def show(canvas) -> int:
+    """Show the canvas in the window; returns the key pressed (or 255)."""
+    import cv2
+
     cv2.imshow(WINDOW, canvas)
     fit_window(canvas.shape[1], canvas.shape[0])
     return cv2.waitKey(1) & 0xFF
@@ -344,19 +395,19 @@ def fit_window(width: int, height: int, max_width: int = 1400) -> None:
         cv2.resizeWindow(WINDOW, int(width * scale), int(height * scale))
 
 
-_layout = None
+_layout = _last_seen = _marks = None
 
 
 def responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs, now, warnings):
-    from cv.monitor import CalloutLayout, build_scene, render
+    from cv.monitor import CalloutLayout, LastSeen, build_scene, render, room_label
 
-    global _layout
+    global _layout, _last_seen
     if _layout is None:
-        _layout = CalloutLayout()
+        _layout, _last_seen = CalloutLayout(), LastSeen()
     status = [settings.publisher.camera_id]
     keys = "C command given | V debug view | Q quit"
     if tracker.current_zone is not None:
-        status.append(f"ROOM {tracker.current_zone}")
+        status.append(room_label(tracker.current_zone))
         keys = f"1-{min(9, len(zone_map.zones))} room | " + keys
     if signs.camera_state is not None:
         status.append(f"camera {signs.camera_motion}")
@@ -365,7 +416,8 @@ def responder_view(image, tracks, tracker, zone_map, pub, settings, args, signs,
     else:
         status.append("MOCK" if args.mock_backend else
                       ("backend offline" if pub["backing_off"] else "backend OK"))
-    return render(image, tracks, build_scene(tracks, signs, now), _layout, status, warnings, keys,
+    marks = _marks.get() if _marks is not None else None
+    return render(image, tracks, build_scene(tracks, signs, now, _last_seen, marks), _layout, status, warnings, keys,
                   settings.tracking.keypoint_min_conf)
 
 
@@ -419,6 +471,13 @@ def _percentile(values: list[float], q: float) -> float | None:
         return None
     ordered = sorted(values)
     return round(ordered[min(len(ordered) - 1, int(q * len(ordered)))], 1)
+
+
+def peak_memory_mb() -> float:
+    import resource
+
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return round(peak / (1 << 20) if sys.platform == "darwin" else peak / 1024, 1)   # bytes on macOS, KB on Linux
 
 
 def build_summary(run_at, frames, elapsed, inference_ms, tracker, publisher, camera, settings,
@@ -479,10 +538,16 @@ def print_summary(summary: dict) -> None:
                   f"p95 {summary['latency_ms_p95']} ms, max {summary['latency_ms_max']} ms")
         if summary["last_error"]:
             print(f"last error        : {summary['last_error']}")
+    if summary.get("memory_peak_mb"):
+        (first_min, first), (last_min, last) = summary["memory_peak_mb"][0], summary["memory_peak_mb"][-1]
+        print(f"peak memory       : {last:.0f} MB after {last_min:g} min ({first:.0f} MB at {first_min:g} min)")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.list_cameras:
+        print(describe_cameras(list_cameras()).replace(", ", "\n"))
+        return 0
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s", stream=sys.stderr)
     try:

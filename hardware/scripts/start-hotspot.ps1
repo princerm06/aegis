@@ -28,6 +28,7 @@ param([switch]$Status, [switch]$Stop)
 $ErrorActionPreference = "Stop"
 $secretsPath = Join-Path $PSScriptRoot "..\firmware\aegis_responder\arduino_secrets.h"
 $devicePort = 7777
+$devicePorts = "7777-7780"   # device N connects to 7777 + N - 1
 
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $null = [Windows.Networking.Connectivity.NetworkInformation, Windows.Networking.Connectivity, ContentType = WindowsRuntime]
@@ -116,11 +117,15 @@ if ($manager.TetheringOperationalState -ne "On") {
 
 # Let the Arduino reach the bridge port from the hotspot (needs an admin shell; harmless if it exists).
 $rule = Get-NetFirewallRule -DisplayName "AEGIS responder bridge" -ErrorAction SilentlyContinue
-if (-not $rule) {
+$open = if ($rule) { ($rule | Get-NetFirewallPortFilter).LocalPort } else { $null }
+if ("$open" -ne $devicePorts) {
     try {
-        New-NetFirewallRule -DisplayName "AEGIS responder bridge" -Direction Inbound -Protocol TCP `
-            -LocalPort $devicePort -RemoteAddress 192.168.137.0/24 -Action Allow | Out-Null
-        Write-Host "Firewall: allowed TCP $devicePort from the hotspot only."
+        if ($rule) { $rule | Set-NetFirewallRule -LocalPort $devicePorts }
+        else {
+            New-NetFirewallRule -DisplayName "AEGIS responder bridge" -Direction Inbound -Protocol TCP `
+                -LocalPort $devicePorts -RemoteAddress 192.168.137.0/24 -Action Allow | Out-Null
+        }
+        Write-Host "Firewall: allowed TCP $devicePorts from the hotspot only."
     } catch {
         Write-Host "Firewall rule not added (not an admin shell). When Windows asks about Python, click Allow." -ForegroundColor Yellow
     }

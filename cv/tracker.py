@@ -180,28 +180,41 @@ class TrackManager:
         return track
 
     def _reattach_candidate(self, xy, ground_px) -> Track | None:
-        """Nearest unseen live track: floor distance, or image distance in zones mode."""
-        if self.zones is not None:
-            if ground_px is None or not self.image_size:
-                return None
-            point, best_distance = ground_px, self.settings.reattach_radius_frac * math.hypot(*self.image_size)
+        """Nearest unseen live track: floor distance when calibrated, else image distance.
 
-            def anchor(track):
-                return track.ground_px if track.zone_id is not None else None
-        else:
+        In the image the radius grows with the person's size, so someone who falls
+        (the ground point jumps from the feet to the middle of a lying body, and
+        the detector often starts a new ID) stays the same person.
+        """
+        settings = self.settings
+        if self.zones is None and self.calibration is not None:
             if xy is None:
                 return None
-            point, best_distance = xy, self.settings.reattach_radius_m
+            point, radius = xy, (lambda track: settings.reattach_radius_m)
 
             def anchor(track):
                 return track.smoothed_xy
-        best = None
+        else:
+            if ground_px is None:
+                return None
+            frame = settings.reattach_radius_frac * math.hypot(*self.image_size) if self.image_size else 0.0
+            point = ground_px
+
+            def radius(track):
+                x1, y1, x2, y2 = track.bbox
+                return max(frame, settings.reattach_body_frac * max(x2 - x1, y2 - y1))
+
+            def anchor(track):
+                if self.zones is not None and track.zone_id is None:
+                    return None
+                return track.ground_px
+        best, best_score = None, 1.0
         for track in self.tracks.values():
             if track.detected or anchor(track) is None:
                 continue
-            distance = math.dist(point, anchor(track))
-            if distance <= best_distance:
-                best, best_distance = track, distance
+            score = math.dist(point, anchor(track)) / max(radius(track), 1e-6)
+            if score <= best_score:
+                best, best_score = track, score
         return best
 
     def _apply(self, track: Track, detection: Detection, t: float,

@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/face_landmarker/"
              "face_landmarker/float16/1/face_landmarker.task")
 CROP_PX = 256
+DOWNLOAD_TIMEOUT_S = 20.0      # per network read; a venue hotspot without internet must not hang startup
 
 
 def face_crop(image_bgr, keypoints, keypoint_conf, min_conf: float, min_face_px: int):
@@ -87,6 +88,10 @@ class FaceScorer:
         self._landmarker = None
         self.available = True
 
+    def prepare(self) -> bool:
+        """Load (and if needed download) the model now, before the frame loop needs it."""
+        return self._load() is not None
+
     def _load(self):
         if self._landmarker is not None or not self.available:
             return self._landmarker
@@ -111,7 +116,9 @@ class FaceScorer:
         self.model_path.parent.mkdir(parents=True, exist_ok=True)
         log.info("Downloading %s", MODEL_URL)
         partial = self.model_path.with_suffix(".part")
-        urllib.request.urlretrieve(MODEL_URL, partial)
+        with urllib.request.urlopen(MODEL_URL, timeout=DOWNLOAD_TIMEOUT_S) as response, open(partial, "wb") as out:
+            while chunk := response.read(1 << 16):
+                out.write(chunk)
         partial.rename(self.model_path)
 
     def closed_score(self, crop_bgr) -> float | None:

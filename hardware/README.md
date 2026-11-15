@@ -11,19 +11,50 @@ dispatches; pending, unapproved proposals are never shown.
 
 ## What the device does
 
-| Moment | LED (D4) | LED matrix | Responder does | Bridge reports |
+| Moment | LED matrix | On-board LED | Responder does | Bridge reports |
 | --- | --- | --- | --- | --- |
-| Idle | off | one corner dot | — | — |
-| Approved dispatch arrives | blinks (fast = `immediate` casualty) | casualty label, e.g. `A`, `C3` | — | `delivered` |
-| Responder accepts | solid | label | short press | `acknowledged` |
-| Responder finishes | off | `OK`, then idle | hold 1.5 s | `completed` |
+| Power-on | `AEGIS` scrolls once | off | — | — |
+| Idle | one corner dot (`--` = not connected) | off | — | — |
+| Self-test | `AEGIS 1 OK` scrolls (`--` instead of `OK` = not connected; the number is the device) | off | three quick taps while idle | nothing |
+| Approved dispatch arrives | casualty label **flashes**, e.g. `A`, `C3` (fast = `immediate`) | blinks | — | `delivered` |
+| Responder accepts | label steady | on | short press | `acknowledged` |
+| Responder finishes | `OK`, then idle | off | hold 1.5 s | `completed` |
+
+The device only uses the medic-confirmed priority for the fast flash, never a
+camera suggestion. Its LED matrix is red: keep it facing away from the camera,
+which detects fake blood by colour.
 
 If the backend resets, completes, or replaces the task, the device clears. The
 reports describe what the responder did, never the casualty's condition.
 
 ## Wiring
 
-Grove Base Shield on the UNO R4 WiFi: **button → D2**, **LED → D4**, USB to the laptop.
+Only a Grove button is needed. Do **not** use a Grove Base Shield: it covers the
+LED matrix. Connect the button with a **Grove-to-male-jumper** cable:
+
+| Wire | Button pin | Arduino pin |
+| --- | --- | --- |
+| yellow | SIG | **2** |
+| red | VCC | **5V** |
+| black | GND | **GND** |
+| white | NC | unused |
+
+Power comes from a USB power bank (USB-C). A Grove LED on pin 4 is optional;
+alerts use the on-board LED and the matrix. Never run the demo with nothing on
+pin 2: a floating input can read as phantom presses.
+
+## Enclosure
+
+`enclosure/aegis_case.scad` is a parametric OpenSCAD case with AEGIS branding, a
+window over the LED matrix (sized for both the UNO R4 WiFi and the UNO Q) and a
+pocket for the Grove button. Two bodies share the same lid design:
+
+- `part = "plate"`: straps onto the power bank (first device, Yoobao PDL20).
+- `part = "plate2"`: a cradle the power bank slides into (second device, Rivacase VA2612).
+
+Export with `openscad -D "part=\"plate\"" -o case.stl enclosure/aegis_case.scad`.
+Print in PLA, no supports, with a 5-8 mm brim. Measure your power bank and set
+`bank` / `bank2` first; STL files are not committed.
 
 ## Flash the firmware (once)
 
@@ -103,6 +134,74 @@ laptop's address on it and run `start-bridge.ps1 -Wifi -WifiListen <that-ip>:777
 The device port is unauthenticated, so the bridge only listens on the hotspot
 address, never on the campus network.
 
+## Two responders
+
+Each Arduino gets its own bridge on the same laptop. Device N reports as
+`responder-device-0N`, connects to port `7777 + N - 1`, and follows `responder-00N`.
+
+Flash the second board with its device number (the first board needs no flag):
+
+```powershell
+arduino-cli compile --upload --fqbn arduino:renesas_uno:unor4wifi -p <its COM port> `
+  --build-property "compiler.cpp.extra_flags=-DAEGIS_DEVICE_NUM=2" hardware/firmware/aegis_responder
+```
+
+Then run one bridge per device, each in its own terminal:
+
+```powershell
+.\hardware\scripts\start-bridge.ps1 -Wifi -Local              # device 1 -> responder-001, port 7777
+.\hardware\scripts\start-bridge.ps1 -Wifi -Local -Device 2    # device 2 -> responder-002, port 7778
+```
+
+### Second board is an Arduino UNO Q
+
+The same sketch builds for the UNO Q (blue 13x8 matrix). Its microcontroller
+reaches the bridge through the board's Linux side (`Arduino_RouterBridge`), so
+there is no `arduino_secrets.h` WiFi join: put the Q's **Linux side** on the
+hotspot instead (App Lab, or `nmcli device wifi connect <hotspot>` in its shell).
+
+```powershell
+arduino-cli core install arduino:zephyr
+arduino-cli lib install Arduino_RouterBridge ArduinoGraphics
+arduino-cli compile --upload --fqbn arduino:zephyr:unoq -p <its COM port> `
+  --build-property "compiler.cpp.extra_flags=-DAEGIS_DEVICE_NUM=2" hardware/firmware/aegis_responder
+```
+
+Wiring is the same (button SIG on pin 2, 5V, GND). On the Q, `AEGIS` scrolls
+continuously while it is linked and idle; `--` means it cannot reach the bridge.
+After a power cycle the Q may rejoin another saved network (e.g. eduroam) and
+show `--`: move its Linux side back to the hotspot.
+
+Both boards join the same hotspot. The full `scripts.live_demo` rehearsal takes
+`responder-002` offline, so use `--prepare-only` when both devices should get tasks.
+
+## Host the whole demo on this laptop (hotspot)
+
+For the rehearsal and demo, the Windows laptop that runs the hotspot also hosts
+the backend, dashboard, Voice and both bridges. Teammates join the
+`AEGIS-RESPONDER` hotspot; nothing listens on the campus network.
+
+```powershell
+.\hardware\scripts\start-demo-host.ps1            # start everything, then health checks
+.\hardware\scripts\start-demo-host.ps1 -Status    # health checks only
+.\hardware\scripts\start-demo-host.ps1 -Stop      # stop what it started
+.\hardware\scripts\start-demo-host.ps1 -Prepare   # also load the two-actor scene (resets the scenario)
+```
+
+| Service | Address | Who uses it |
+| --- | --- | --- |
+| backend | `http://192.168.137.1:8000` | bridges, dashboard, camera (`--base-url`) |
+| dashboard | `http://192.168.137.1:3000/command` | teammates on the hotspot |
+| dashboard | `http://localhost:3000/command` | this laptop (browser microphone needs localhost) |
+| Voice | `http://127.0.0.1:8010` | reached through the dashboard only |
+| bridges | `192.168.137.1:7777`, `:7778` | the two Arduinos |
+
+Logs are in `hardware/logs/demo-host/`. Run it **once from an Administrator
+PowerShell** so it can add the firewall rule that lets hotspot devices (and only
+those) reach ports 8000 and 3000. `voice/.env` and the neural weights are not in
+git; without them Voice is text-only and `-Neural` is skipped. Close any old
+backend or bridge windows first: the script refuses to start on a busy port.
+
 ## On university WiFi: Tailscale
 
 Campus WiFi is crowded and usually blocks laptops from reaching each other.
@@ -135,6 +234,11 @@ restarts the bridge if it ever exits with an error):
 .\hardware\scripts\start-bridge.ps1 -Backend <name> -CheckOnly        # just run the checks
 .\hardware\scripts\start-bridge.ps1 -Local                            # backend on this laptop
 ```
+
+The backend listens on port 8000. If the team reaches it through the private
+proxy instead, that is port 8011: add `-BackendPort 8011` (the proxy must pass
+`/health` and `/api/v1/...` through unchanged). Device ports 7777-7780 are
+separate and never go through the proxy.
 
 If PowerShell refuses to run scripts, use
 `powershell -ExecutionPolicy Bypass -File hardware\scripts\start-bridge.ps1 ...`.

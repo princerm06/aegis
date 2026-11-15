@@ -13,3 +13,7 @@ Production endpoints in the shared contract remain reserved. Local operator IDs
 are not authenticated identities; local records are not a durable audit trail.
 No CV/LLM output is a medical assessment or dispatch authorization. No real
 hardware command path or real emergency dispatch service is implemented.
+
+Optional historical NYC EMS dispatch-duration research is documented in
+`../ml/ems/README.md`. Its read-only simulation advisory defaults to disabled
+and cannot alter coordination, approval, dispatch, clinical or hardware state.

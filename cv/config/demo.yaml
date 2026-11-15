@@ -1,0 +1,52 @@
+# Live demo: the C922 mounted high (2-2.5 m, angled about 45 degrees down, not
+# straight down) over two actors lying in one room. Same rooms as rooms.yaml;
+# everyone seen is reported in the room picked with --room or keys 1-3.
+#
+#   python -m cv.main --config cv/config/demo.yaml --room room-2 --send-signs --stream-port 8090
+#
+# Dashboard camera tile: http://127.0.0.1:8090/stream.mjpg
+# Dashboard "command given" button (same as key c): POST http://127.0.0.1:8090/command
+# Unlisted settings use the defaults in cv/settings.py (same as pipeline.yaml).
+
+camera:
+  name: C922
+  index: 0
+  width: 1920               # faces stay big enough for the eye check at 2-3 m
+  height: 1080
+  fps: 30
+
+mapping:
+  mode: zones
+  zone_select: keys
+  frame_id: demo-floor-1
+  zones:
+    - id: room-1
+      x_m: 3.0
+      y_m: 2.0
+    - id: room-2
+      x_m: 14.0
+      y_m: 8.0
+    - id: room-3
+      x_m: 18.0
+      y_m: 14.0
+
+tracking:
+  # The backend links each casualty to one track for good, so an actor must keep
+  # their track ID when someone stands in front of them or the detector drops
+  # them for a while: keep unseen tracks for 5 minutes (re-attached when seen
+  # again near where they were) instead of 30 s. The cost: someone who walked
+  # through stays listed as occluded for 5 minutes too.
+  lost_after_s: 300.0
+
+signs:
+  enabled: true
+  # Seen from above, open eyelids look half closed: in the high-camera demo-two
+  # take open eyes scored about 0.45 and closed eyes about 0.75 (0.4 is tuned on
+  # frontal faces, where closed eyes score 0.7-0.9).
+  eyes_closed_threshold: 0.6
+  # Lying 3 m away the eyes are 8-17 px apart and score 0.35-0.7 open or closed,
+  # so read faces only from about 22 px between the eyes (half lying at 2-3 m: 25-35 px).
+  eyes_min_face_px: 72
+
+publisher:
+  camera_id: room-cam-1

@@ -73,15 +73,19 @@ function TaskCard({
   };
   const awaitingAck = a.status === "dispatched" || a.status === "delivered";
   const next = STEPS[idx + 1] as "delivered" | "acknowledged" | "completed" | undefined;
+  const invalidated = a.status !== "completed" && a.route_status === "invalidated";
+  const stale = !invalidated && a.status !== "completed" && !!a.route && a.route.map_revision !== state.scenario.scene_map?.revision;
 
   return (
-    <article className={`rounded border bg-panel-2 p-2 ${a.status === "completed" ? "border-line opacity-60" : "border-line-strong"}`}>
+    <article className={`rounded border bg-panel-2 p-2 ${a.status === "completed" ? "border-line opacity-60" : invalidated ? "border-danger/60" : "border-line-strong"}`}>
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-semibold">{responderName(state, a.responder_id)}</span>
         <span className="text-muted">→</span>
         <span className="mono text-[13px] font-semibold">{shortId(a.casualty_id)}</span>
         {a.route && <span className="mono text-[10.5px] text-muted">{meters(a.route.distance_m)}</span>}
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-1">
+          {invalidated && <Badge tone="danger">route invalidated</Badge>}
+          {!invalidated && stale && <Badge>historical route</Badge>}
           {awaitingAck ? (
             <Badge tone="warn" className="blink">awaiting ack</Badge>
           ) : a.status === "acknowledged" ? (
@@ -91,6 +95,12 @@ function TaskCard({
           )}
         </span>
       </div>
+      {invalidated && (
+        <p className="mt-1 text-[10.5px] leading-snug text-danger">
+          Blocked at {(a.invalidated_blocks ?? []).map(([c, r]) => `(${c}, ${r})`).join(", ") || "unknown cell"} —
+          historical route kept; replan and approve a revised route before redispatch.
+        </p>
+      )}
 
       <ol className="mt-2 grid grid-cols-4 gap-1">
         {STEPS.map((s, i) => {

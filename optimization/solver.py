@@ -89,6 +89,33 @@ def _observation_reasons(casualty: Casualty, request: OptimizationRequest) -> li
     return reasons
 
 
+def _traversed_cells(grid, route) -> set[tuple[int, int]]:
+    """World waypoints interpolated to grid cells (same sampling as demo checks)."""
+    cells: set[tuple[int, int]] = set()
+    waypoints = route.waypoints
+    for first, second in zip(waypoints, waypoints[1:]):
+        distance = math.hypot(second.x_m - first.x_m, second.y_m - first.y_m)
+        steps = max(1, math.ceil(distance / (grid.resolution_m / 4)))
+        for step in range(steps + 1):
+            fraction = step / steps
+            x = first.x_m + fraction * (second.x_m - first.x_m)
+            y = first.y_m + fraction * (second.y_m - first.y_m)
+            column = math.floor((x - grid.origin.x_m) / grid.resolution_m)
+            row = math.floor((y - grid.origin.y_m) / grid.resolution_m)
+            cells.add((column, row))
+    return cells
+
+
+def _route_blocked_cells(router, grid, route) -> list[tuple[int, int]]:
+    """Sorted blocked cells traversed by a historical route on the current map."""
+    try:
+        cells = _traversed_cells(grid, route)
+    except (ArithmeticError, ValueError):
+        return []
+    blocked = [cell for cell in cells if router._is_blocked(cell)]
+    return sorted(blocked)
+
+
 def _validate_context(request: OptimizationRequest) -> None:
     casualties = {casualty.id for casualty in request.scenario.casualties}
     responders = {responder.id for responder in request.scenario.responders}
@@ -341,6 +368,12 @@ def optimize(request: OptimizationRequest) -> OptimizationResult:
     for casualty in scene.casualties:
         if casualty.id in active_casualties:
             reasons[casualty.id] = ["active_assignment_preserved", *_observation_reasons(casualty, request)]
+    active_router = None
+    if scene_map is not None and scene_map.occupancy_grid is not None:
+        try:
+            active_router = _GridRouter(scene_map)
+        except ValueError:
+            active_router = None
     for assignment in preserved:
         if assignment.route is None or scene_map is None or scene_map.occupancy_grid is None:
             reasons[assignment.casualty_id].append("active_route_unverified")
@@ -350,6 +383,11 @@ def optimize(request: OptimizationRequest) -> OptimizationResult:
         if (assignment.route is not None
                 and assignment.route.waypoints[-1] != casualty_positions[assignment.casualty_id]):
             reasons[assignment.casualty_id].append("active_route_destination_changed")
+        if (assignment.route is not None and active_router is not None
+                and scene_map is not None and scene_map.occupancy_grid is not None
+                and _route_blocked_cells(active_router, scene_map.occupancy_grid,
+                                         assignment.route)):
+            reasons[assignment.casualty_id].append("active_route_blocked")
         warnings = [reason for reason in reasons[assignment.casualty_id]
                     if reason.startswith("active_route_")]
         if warnings:

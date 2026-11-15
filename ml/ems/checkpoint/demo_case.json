@@ -1,0 +1,12 @@
+{
+  "inputs": {
+    "incident_datetime": "2023-03-20T12:00:00",
+    "initial_call_type": "RESPIR",
+    "initial_severity_level_code": "4",
+    "borough": "BRONX"
+  },
+  "example_kind": "illustrative_input_not_an_incident_record",
+  "expected_prediction_seconds": 62.5109748840332,
+  "model_sha256": "078d3fb1970c0059c08677dfb67e0834f43e510fc9146da083803817ef548b15",
+  "note": "Fixed illustrative query, not a source incident. No observed target is published; weights and evaluation use real historical data."
+}

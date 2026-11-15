@@ -2,6 +2,7 @@
 
     python -m cv.tools.record --scenario lying_two --duration 30
     python -m cv.tools.record --config cv/config/phone.yaml --scenario phone_zone
+    python -m cv.tools.record --take breathe-12     # scripted take with a known answer (cv.tools.validate)
 
 Writes ``cv/recordings/<scenario>-<UTC time>.mp4`` and a ``.json`` sidecar with
 the measured FPS, per-frame times, camera, mapping and the floor calibration
@@ -22,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
-from cv.camera import Camera
+from cv.camera import Camera, camera_override
 from cv.clock import iso_utc
 from cv.recording import write_sidecar
 from cv.settings import CV_DIR, DEFAULT_CONFIG, load_settings, resolve
@@ -34,13 +35,14 @@ FPS_PROBE_S = 1.0
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Record the camera for replay and evaluation")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG))
-    parser.add_argument("--camera", type=int, help="camera index (overrides config)")
+    parser.add_argument("--camera", help="camera index or name, e.g. 0 or C922 (overrides config)")
     parser.add_argument("--camera-id", help="camera ID stored with the recording (overrides config)")
     parser.add_argument("--homography", help="calibration to store with the recording (overrides config)")
-    parser.add_argument("--scenario", default="unlabeled", help="label, also used in the file name")
-    parser.add_argument("--duration", type=float, default=30.0, help="seconds to record (0 = until q)")
-    parser.add_argument("--countdown", type=float, default=0.0,
-                        help="seconds of preview before recording starts (time to get in place)")
+    parser.add_argument("--scenario", help="label, also used in the file name (default: unlabeled / the take)")
+    parser.add_argument("--take", help="validation take, e.g. breathe-12 (list: python -m cv.tools.validate --list)")
+    parser.add_argument("--duration", type=float, help="seconds to record (0 = until q; default 30 / the take)")
+    parser.add_argument("--countdown", type=float,
+                        help="seconds of preview before recording starts (default 0, 15 for a take: the setup is read aloud)")
     parser.add_argument("--output", help="video path (default cv/recordings/<scenario>-<time>.mp4)")
     parser.add_argument("--notes", default="", help="free text stored in the sidecar")
     parser.add_argument("--no-display", action="store_true")
@@ -67,13 +69,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     import cv2
 
     args = build_parser().parse_args(argv)
+    take = cues = None
+    if args.take:
+        from cv.tools.validate import TAKES, TAKES_DIR, Cues, say
+
+        if args.take not in TAKES:
+            raise RuntimeError(f"unknown take {args.take!r}; takes: {', '.join(TAKES)}")
+        take = TAKES[args.take]
+        cues = Cues(take, speak=say)
+    scenario = args.scenario or (take.name if take else "unlabeled")
+    duration = args.duration if args.duration is not None else (take.duration_s if take else 30.0)
+    countdown = args.countdown if args.countdown is not None else (15.0 if take else 0.0)
     settings = load_settings(args.config)
-    if args.camera is not None:
-        settings = replace(settings, camera=replace(settings.camera, index=args.camera))
+    settings = replace(settings, camera=camera_override(settings.camera, args.camera))
     camera_id = args.camera_id or settings.publisher.camera_id
     started_wall = datetime.now(timezone.utc)
+    folder = TAKES_DIR if take else CV_DIR / "recordings"
     output = Path(args.output) if args.output else (
-        CV_DIR / "recordings" / f"{args.scenario}-{started_wall.strftime('%Y%m%dT%H%M%SZ')}.mp4")
+        folder / f"{scenario}-{started_wall.strftime('%Y%m%dT%H%M%SZ')}.mp4")
     output.parent.mkdir(parents=True, exist_ok=True)
     mapping = mapping_info(settings, args.homography)
 
@@ -94,7 +107,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     return 2
                 continue
             if countdown_until is None:
-                countdown_until = frame.t + max(0.0, args.countdown)
+                countdown_until = frame.t + max(0.0, countdown)
+                if take:
+                    print(f"{take.name}: {take.setup}")
+                    say(f"{take.setup} Recording starts in {countdown:.0f} seconds.")
             if frame.t < countdown_until:
                 if not args.no_display and not preview(cv2, frame.image,
                                                        f"starting in {countdown_until - frame.t:.0f} s"):
@@ -103,6 +119,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             if first_t is None:
                 first_t = frame.t
                 size = (frame.image.shape[1], frame.image.shape[0])
+                if take and not take.events():
+                    say("Recording")
                 print(f"Recording {size[0]}x{size[1]} from {camera.label} to {output}")
             image = frame.image
             if (image.shape[1], image.shape[0]) != size:
@@ -118,9 +136,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     buffered.clear()
             else:
                 writer.write(image)
-            if not args.no_display and not preview(cv2, frame.image, f"REC {elapsed:5.1f} s"):
+            cue = cues.update(elapsed) if cues else ""
+            if not args.no_display and not preview(cv2, frame.image, f"REC {elapsed:5.1f} s", cue):
                 break
-            if args.duration and elapsed >= args.duration:
+            if duration and elapsed >= duration:
+                if take:
+                    say("Done")
                 break
     except KeyboardInterrupt:
         pass
@@ -140,10 +161,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     fps = measured_fps(times) or float(settings.camera.fps)
     sidecar = write_sidecar(output, {
         "video": output.name,
-        "scenario": args.scenario,
+        "scenario": scenario,
+        "take": {"name": take.name, "events": take.events()} if take else None,
         "notes": args.notes,
         "started_at_utc": iso_utc(started_wall),
-        "camera": {"index": settings.camera.index, "camera_id": camera_id,
+        "camera": {"index": camera.device_index, "name": camera.device_name, "camera_id": camera_id,
                    "width": size[0], "height": size[1], "requested_fps": settings.camera.fps,
                    "reconnects": camera.reconnects},
         "frames": len(times),
@@ -172,10 +194,15 @@ def open_writer(cv2, path: Path, fps: float | None, size):
     return writer
 
 
-def preview(cv2, image, label: str) -> bool:
+def preview(cv2, image, label: str, cue: str = "") -> bool:
     canvas = image.copy()
     cv2.circle(canvas, (24, 26), 9, (0, 0, 230), -1)
     cv2.putText(canvas, label, (42, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 230), 2, cv2.LINE_AA)
+    if cue:
+        cv2.putText(canvas, cue, (24, canvas.shape[0] - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.6, (0, 0, 0), 8,
+                    cv2.LINE_AA)
+        cv2.putText(canvas, cue, (24, canvas.shape[0] - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.6, (255, 255, 255), 3,
+                    cv2.LINE_AA)
     cv2.imshow(WINDOW, canvas)
     return cv2.waitKey(1) & 0xFF not in (ord("q"), 27)
 

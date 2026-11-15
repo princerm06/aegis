@@ -224,6 +224,18 @@ export interface SimulationDispatch {
 
 export type AssignmentStatus = "dispatched" | "delivered" | "acknowledged" | "completed";
 
+/** Advisory: a dispatched route crossing blocked cells. Historical route kept. */
+export interface RouteInvalidation {
+  mode: "simulation";
+  assignment_id: string;
+  casualty_id: string;
+  responder_id: string;
+  map_revision: string;
+  historical_map_revision?: string | null;
+  blocked_cells: [number, number][];
+  alternative_route?: AStarRoute | null;
+}
+
 export interface SimulatedAssignment {
   mode: "simulation";
   id: string;
@@ -239,6 +251,9 @@ export interface SimulatedAssignment {
   acknowledged_at?: ISODate | null;
   completed_at?: ISODate | null;
   device_event_ids: string[];
+  route_status?: "current" | "invalidated";
+  invalidated_reason?: string | null;
+  invalidated_blocks?: [number, number][] | null;
 }
 
 export interface RecommendationState {
@@ -272,6 +287,7 @@ export interface SimulationState {
   approvals: SimulationApproval[];
   dispatches: SimulationDispatch[];
   assignments: SimulatedAssignment[];
+  route_invalidations?: RouteInvalidation[];
   last_recommendation: RecommendationState | null;
 }
 
@@ -320,4 +336,102 @@ export interface ExplanationResponse {
     facts: ExplanationFact[];
     fallback_reason: string | null;
   };
+}
+
+
+// --- Neural Shadow Advisory Intelligence Types ---
+
+export interface ConstraintValidationSummary {
+  valid: boolean;
+  violation_count: number;
+  violations: string[];
+  checked_pairs: number;
+}
+
+export interface ModelComparisonVsOrtools {
+  count_diff: number;
+  priority_points_diff: number;
+  distance_diff_m: number;
+  matches_ortools_pairs: boolean;
+}
+
+export interface NeuralModelPrediction {
+  model_name: string;
+  checkpoint_file: string;
+  checkpoint_digest: string;
+  available: boolean;
+  status: "success" | "unavailable" | "failed";
+  selected_pairs: [string, string][];
+  unassigned_casualty_ids: string[];
+  assigned_count: number;
+  priority_points: number;
+  travel_distance_m: number;
+  travel_cost_mm: number;
+  prep_duration_ms: number;
+  inference_duration_ms: number;
+  decoding_duration_ms: number;
+  total_duration_ms: number;
+  hard_constraint_validation: ConstraintValidationSummary;
+  unfiltered_invalid_proposals: number;
+  comparison_vs_ortools?: ModelComparisonVsOrtools | null;
+  error?: string | null;
+  authorizes_dispatch: false;
+}
+
+export interface DifferingAssignment {
+  casualty_id: string;
+  ortools_responder_id: string | null;
+  mlp_responder_id: string | null;
+  gnn_responder_id: string | null;
+}
+
+export interface DisagreementAnalysis {
+  models_agree_with_each_other: boolean;
+  models_agree_with_ortools: boolean;
+  differing_assignments: DifferingAssignment[];
+  summary: string;
+}
+
+export interface OrtoolsSummary {
+  engine: string;
+  authoritative: true;
+  assigned_count: number;
+  priority_points: number;
+  travel_distance_m: number;
+  travel_cost_mm: number;
+  selected_pairs: [string, string][];
+  runtime_ms: number;
+  hard_constraint_validation: ConstraintValidationSummary;
+}
+
+export type NeuralComparisonStatus =
+  | "available"
+  | "disabled"
+  | "no_proposal"
+  | "checkpoints_unavailable"
+  | "inference_failed"
+  | "stale";
+
+export interface NeuralComparisonReport {
+  mode: "simulation";
+  schema_version: "1.0";
+  scenario_id: string;
+  scene_revision: number;
+  epoch: number;
+  proposal_id?: string | null;
+  read_only: true;
+  authorizes_dispatch: false;
+  authoritative_engine: "ortools";
+  status: NeuralComparisonStatus;
+  available: boolean;
+  context: "current" | "stale";
+  stale_reasons: string[];
+  evaluated_at: ISODate;
+  message: string;
+  ortools_summary?: OrtoolsSummary | null;
+  mlp_prediction?: NeuralModelPrediction | null;
+  gnn_prediction?: NeuralModelPrediction | null;
+  disagreement_analysis?: DisagreementAnalysis | null;
+  voice_summary?: string | null;
+  limitations: string[];
 }

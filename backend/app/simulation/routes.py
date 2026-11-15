@@ -15,6 +15,7 @@ from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 from backend.app.models import CVObservation, MedicalAssessment, SceneMap
 from backend.app.services.evaluation_reports import EvaluationIndex
+from backend.app.intelligence.neural_shadow import NeuralComparisonReport
 from backend.app.simulation.comparisons import ComparisonReport, ComparisonRequest
 from backend.app.simulation.models import (
     ActionResponse,
@@ -175,6 +176,12 @@ def comparisons(request: Request, scenario_id: str, body: ComparisonRequest) -> 
 def evaluations(request: Request, scenario_id: str) -> EvaluationIndex:
     """Committed synthetic evaluation artifacts with content digests."""
     return _call(request, lambda s: s.evaluations(scenario_id))
+
+
+@router.get("/{scenario_id}/neural-comparison", response_model=NeuralComparisonReport)
+def neural_comparison(request: Request, scenario_id: str) -> NeuralComparisonReport:
+    """Read-only live shadow comparison (OR-Tools vs Pairwise MLP vs Bipartite GNN)."""
+    return _call(request, lambda s: s.neural_comparison(scenario_id))
 
 
 @router.get("/{scenario_id}/proposals/{proposal_id}/explanation")

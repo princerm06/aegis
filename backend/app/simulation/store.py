@@ -1,3 +1,4 @@
+import logging
 """Locked in-memory SIMULATION state. Never contacts devices or real dispatch.
 
 Lock ordering: the store lock guards only the session table and is never
@@ -17,6 +18,8 @@ against observations that went stale after it was granted.
 import hashlib
 import json
 import secrets
+
+logger = logging.getLogger(__name__)
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
@@ -67,6 +70,7 @@ from backend.app.simulation.models import (
     RequiredCapabilitiesRequest,
     ResetRequest,
     ResponderUpdateRequest,
+    RouteInvalidation,
     SimulatedAssignment,
     SimulatedDeviceEvent,
     SimulateDeviceRequest,
@@ -138,6 +142,53 @@ def _camera_id(camera_id: str, local_id: str) -> str:
 
 def _map_fingerprint(scene_map: SceneMap) -> str:
     return _fingerprint(_dump(scene_map))
+
+
+def _blocked_cells_on_route(scene_map: SceneMap, route: Any) -> list[list[int]]:
+    """Sorted [col, row] cells where a historical route crosses blocked space.
+
+    Uses the same A* grid router (occupancy + obstacle polygons) that new
+    proposals use, over interpolated waypoints. Returns [] when the route or
+    grid is missing or geometry cannot be evaluated.
+    """
+    import math
+
+    if route is None or scene_map.occupancy_grid is None:
+        return []
+    grid = scene_map.occupancy_grid
+    try:
+        from optimization.routing import _GridRouter
+
+        router = _GridRouter(scene_map)
+    except ValueError:
+        return []
+    cells: set[tuple[int, int]] = set()
+    try:
+        for first, second in zip(route.waypoints, route.waypoints[1:]):
+            distance = math.hypot(second.x_m - first.x_m, second.y_m - first.y_m)
+            steps = max(1, math.ceil(distance / (grid.resolution_m / 4)))
+            for step in range(steps + 1):
+                fraction = step / steps
+                x = first.x_m + fraction * (second.x_m - first.x_m)
+                y = first.y_m + fraction * (second.y_m - first.y_m)
+                cells.add((math.floor((x - grid.origin.x_m) / grid.resolution_m),
+                           math.floor((y - grid.origin.y_m) / grid.resolution_m)))
+    except (ArithmeticError, ValueError):
+        return []
+    return [[col, row] for col, row in sorted(
+        cell for cell in cells if router._is_blocked(cell))]
+
+
+def _advisory_alternative(scene_map: SceneMap, start: Any, goal: Any) -> Any | None:
+    """Fresh A* route on the current map, or None when infeasible/invalid."""
+    try:
+        from optimization.routing import plan_route
+    except ImportError:
+        return None
+    try:
+        return plan_route(scene_map, start, goal)
+    except ValueError:
+        return None
 
 
 def _default_solver(request: Any) -> Any:
@@ -235,6 +286,7 @@ class _Session:
     approvals: dict[str, SimulationApproval] = field(default_factory=dict)
     dispatches: dict[str, SimulationDispatch] = field(default_factory=dict)
     assignments: dict[str, SimulatedAssignment] = field(default_factory=dict)
+    route_invalidations: list[RouteInvalidation] = field(default_factory=list)
     device_events: dict[str, SimulatedDeviceEvent] = field(default_factory=dict)
     map_revisions: dict[str, str] = field(default_factory=dict)
     cameras: dict[str, CameraRecord] = field(default_factory=dict)
@@ -243,6 +295,8 @@ class _Session:
     intelligence_policy: IntelligencePolicy = field(default_factory=IntelligencePolicy)
     previous_recommendations: list[Assignment] = field(default_factory=list)
     previous_recommendation_proposal_id: str | None = None
+    neural_comparisons: dict[str, Any] = field(default_factory=dict)
+    current_neural_comparison: Any | None = None
 
     def next_id(self, kind: str) -> str:
         self.counters[kind] = self.counters.get(kind, 0) + 1
@@ -288,6 +342,8 @@ class SimulationStore:
         min_confidence: float = 0.5,
         clock_skew_seconds: float = 5.0,
         max_events: int = 1000,
+        neural_shadow_enabled: bool | None = None,
+        neural_shadow_service: Any | None = None,
     ):
         self.clock = clock or _utcnow
         self.solver = solver or _default_solver
@@ -301,6 +357,13 @@ class SimulationStore:
         self._lock = threading.Lock()
         self._sessions: dict[str, _Session] = {}
         self._nonce = secrets.token_hex(4)
+        if neural_shadow_enabled is None:
+            from backend.app.intelligence.neural_shadow import is_neural_shadow_enabled
+
+            self.neural_shadow_enabled = is_neural_shadow_enabled()
+        else:
+            self.neural_shadow_enabled = neural_shadow_enabled
+        self.neural_shadow_service = neural_shadow_service
 
 
     def _now(self) -> datetime:
@@ -564,6 +627,114 @@ class SimulationStore:
 
         self._session(scenario_id)
         return evaluation_index()
+
+    def neural_comparison(self, scenario_id: str) -> Any:
+        """Read-only live shadow comparison (OR-Tools vs Pairwise MLP vs Bipartite GNN)."""
+        from backend.app.intelligence.neural_shadow import (
+            NeuralComparisonReport,
+            get_neural_shadow_service,
+        )
+
+        session = self._session(scenario_id)
+        with session.lock:
+            now = self._now()
+            if not self.neural_shadow_enabled:
+                return NeuralComparisonReport(
+                    scenario_id=scenario_id,
+                    scene_revision=session.scene_revision,
+                    epoch=session.epoch,
+                    available=False,
+                    status="disabled",
+                    context="current",
+                    evaluated_at=now,
+                    message=(
+                        "Neural shadow advisory is disabled (AEGIS_NEURAL_SHADOW_ENABLED=false). "
+                        "OR-Tools CP-SAT is the authoritative optimization engine."
+                    ),
+                )
+
+            proposal_id = session.current_proposal_id
+            if proposal_id is None and session.current_neural_comparison is not None:
+                comp = session.current_neural_comparison
+                stale_reasons = []
+                if session.epoch != comp.epoch:
+                    stale_reasons.append("epoch_changed")
+                if session.scene_revision != comp.scene_revision:
+                    stale_reasons.append("scene_revision_changed")
+                stale_reasons.append("proposal_superseded")
+                return comp.model_copy(
+                    update={
+                        "context": "stale",
+                        "status": "stale",
+                        "stale_reasons": stale_reasons,
+                        "evaluated_at": now,
+                    }
+                )
+
+            if proposal_id is None or proposal_id not in session.proposals:
+                return NeuralComparisonReport(
+                    scenario_id=scenario_id,
+                    scene_revision=session.scene_revision,
+                    epoch=session.epoch,
+                    available=False,
+                    status="no_proposal",
+                    context="current",
+                    evaluated_at=now,
+                    message="No optimization proposal has been generated for this scenario yet.",
+                )
+
+            proposal = session.proposals[proposal_id]
+            comparison = session.neural_comparisons.get(proposal_id)
+
+            if comparison is None:
+                context_entry = session.proposal_context.get(proposal_id)
+                if context_entry is not None:
+                    scenario, ortools_result = context_entry
+                    req, _ = self._build_request(session, now, self.solver_name, session.intelligence_policy)
+                    req = req.model_copy(update={"scenario": scenario, "scene_revision": proposal.revision})
+                    service = self.neural_shadow_service or get_neural_shadow_service()
+                    comparison = service.run_inference(
+                        req,
+                        ortools_assignments=getattr(ortools_result, "assignments", []),
+                        ortools_runtime_ms=getattr(ortools_result, "runtime_ms", 0.0),
+                        epoch=proposal.epoch,
+                        revision=proposal.revision,
+                        proposal_id=proposal_id,
+                    )
+                    session.neural_comparisons[proposal_id] = comparison
+                    session.current_neural_comparison = comparison
+                else:
+                    return NeuralComparisonReport(
+                        scenario_id=scenario_id,
+                        scene_revision=session.scene_revision,
+                        epoch=session.epoch,
+                        proposal_id=proposal_id,
+                        available=False,
+                        status="inference_failed",
+                        context="current",
+                        evaluated_at=now,
+                        message="Neural comparison could not be derived for the current proposal.",
+                    )
+
+            stale_reasons: list[str] = []
+            if session.epoch != comparison.epoch:
+                stale_reasons.append("epoch_changed")
+            if session.scene_revision != comparison.scene_revision:
+                stale_reasons.append("scene_revision_changed")
+            if proposal.status not in OPEN_PROPOSAL_STATUSES:
+                stale_reasons.append(f"proposal_{proposal.status}")
+
+            if stale_reasons:
+                return comparison.model_copy(
+                    update={
+                        "context": "stale",
+                        "status": "stale",
+                        "stale_reasons": stale_reasons,
+                        "evaluated_at": now,
+                    }
+                )
+
+            return comparison.model_copy(update={"context": "current", "evaluated_at": now})
 
 
     def _run(self, session: _Session, action: str, body: Any,
@@ -885,6 +1056,24 @@ class SimulationStore:
                 result = self.solver(job.request.model_copy(deep=True))
             except Exception as exc:
                 error = f"{type(exc).__name__}: {exc}"
+
+            shadow_comparison = None
+            if self.neural_shadow_enabled and result is not None and error is None:
+                try:
+                    from backend.app.intelligence.neural_shadow import get_neural_shadow_service
+
+                    service = self.neural_shadow_service or get_neural_shadow_service()
+                    shadow_comparison = service.run_inference(
+                        job.request.model_copy(deep=True),
+                        ortools_assignments=getattr(result, "assignments", []),
+                        ortools_runtime_ms=getattr(result, "runtime_ms", 0.0),
+                        epoch=job.epoch,
+                        revision=job.revision,
+                    )
+                except Exception as exc:
+                    logger.warning("Neural shadow inference failed: %s: %s", type(exc).__name__, exc)
+                    shadow_comparison = None
+
             with session.lock:
                 now = self._now()
                 swept = self._sweep(session, now)
@@ -893,14 +1082,14 @@ class SimulationStore:
                             p.status in OPEN_PROPOSAL_STATUSES and p.revision == job.revision
                             for p in session.proposals.values()):
                         return None
-                    return self._install(session, job, result, error)
+                    return self._install(session, job, result, error, shadow_comparison=shadow_comparison)
                 if not (swept and self.auto_recommend):
                     return None
                 job = self._prepare(session, now, "observation_freshness_changed")
         return None
 
     def _install(self, session: _Session, job: _SolverJob, result: Any,
-                 error: str | None) -> SimulationProposal | RecommendationState:
+                 error: str | None, shadow_comparison: Any | None = None) -> SimulationProposal | RecommendationState:
         now = self._now()
         for proposal in session.proposals.values():
             if proposal.status in OPEN_PROPOSAL_STATUSES:
@@ -960,6 +1149,10 @@ class SimulationStore:
                 job.request.scenario.model_copy(deep=True),
                 result.model_copy(update={"rationale": list(proposal.rationale)}, deep=True))
             session.current_proposal_id = proposal.id
+            if shadow_comparison is not None:
+                shadow_comparison = shadow_comparison.model_copy(update={"proposal_id": proposal.id})
+                session.neural_comparisons[proposal.id] = shadow_comparison
+                session.current_neural_comparison = shadow_comparison
         recommendation = RecommendationState(
             scene_revision=job.revision, computed_at=now, trigger=job.trigger,
             proposal_id=proposal.id if proposal else None,
@@ -1015,8 +1208,10 @@ class SimulationStore:
             for name in ("tracks", "casualty_tracks", "observation_fingerprints",
                          "responder_reported_at", "responder_preferences", "proposals",
                          "proposal_context", "approvals", "dispatches", "assignments",
-                         "device_events", "cameras"):
+                         "route_invalidations", "device_events", "cameras",
+                         "neural_comparisons"):
                 getattr(session, name).clear()
+            session.current_neural_comparison = None
             session.resolved.clear()
             session.map_revisions = ({scenario.scene_map.revision: _map_fingerprint(scenario.scene_map)}
                                      if scenario.scene_map else {})
@@ -1314,7 +1509,7 @@ class SimulationStore:
             assert session.meta is not None
             if scene_map.frame_id != session.meta.frame_id:
                 raise _invalid("Map frame_id must match the scenario frame")
-            result = {"map_revision": scene_map.revision}
+            result: dict[str, Any] = {"map_revision": scene_map.revision}
             current = session.scene_map
             if current is not None and current == scene_map:
                 return result, None, True
@@ -1327,9 +1522,73 @@ class SimulationStore:
             session.emit("simulation.map_updated",
                          {"previous_revision": current.revision if current else None,
                           "scene_map": _dump(scene_map)}, now)
+            invalidated, cleared = self._refresh_route_invalidations(session, now)
+            result["invalidated_assignment_ids"] = invalidated
+            result["revalidated_assignment_ids"] = cleared
             return result, f"map:{scene_map.revision}", False
 
         return self._run(session, "map_update", _dump(scene_map), apply, idempotency_key)
+
+    @staticmethod
+    def _refresh_route_invalidations(session: _Session,
+                                     now: datetime) -> tuple[list[str], list[str]]:
+        """Flag active dispatched routes crossing blocked cells on the new map.
+
+        Historical ``route`` bytes are never rewritten; only ``route_status``
+        markers and the advisory ``route_invalidations`` list change. Returns
+        (newly_invalidated_ids, newly_cleared_ids).
+        """
+        assert session.scene_map is not None
+        previous = {entry.assignment_id: entry for entry in session.route_invalidations}
+        invalidations: list[RouteInvalidation] = []
+        for record in session.assignments.values():
+            if record.status == "completed" or record.route is None:
+                if record.route_status != "current":
+                    record.route_status = "current"
+                    record.invalidated_reason = None
+                    record.invalidated_blocks = None
+                continue
+            blocked = _blocked_cells_on_route(session.scene_map, record.route)
+            if blocked:
+                record.route_status = "invalidated"
+                record.invalidated_reason = f"route_blocked:{session.scene_map.revision}"
+                record.invalidated_blocks = [cell[:] for cell in blocked]
+                responder = session.responders.get(record.responder_id)
+                casualty = session.casualties.get(record.casualty_id)
+                alternative = None
+                if responder is not None and casualty is not None:
+                    alternative = _advisory_alternative(
+                        session.scene_map, responder.position, casualty.position)
+                invalidations.append(RouteInvalidation(
+                    assignment_id=record.id, casualty_id=record.casualty_id,
+                    responder_id=record.responder_id,
+                    map_revision=session.scene_map.revision,
+                    historical_map_revision=record.route.map_revision,
+                    blocked_cells=[cell[:] for cell in blocked],
+                    alternative_route=alternative,
+                ))
+            elif record.route_status == "invalidated":
+                record.route_status = "current"
+                record.invalidated_reason = None
+                record.invalidated_blocks = None
+        session.route_invalidations = invalidations
+        current_ids = {entry.assignment_id for entry in invalidations}
+        previous_ids = set(previous)
+        changed = (current_ids != previous_ids or any(
+            previous[entry.assignment_id].blocked_cells != entry.blocked_cells
+            for entry in invalidations if entry.assignment_id in previous))
+        if invalidations and changed:
+            session.emit("simulation.route_invalidated", {
+                "map_revision": session.scene_map.revision,
+                "assignment_ids": sorted(current_ids),
+                "invalidations": [_dump(entry) for entry in invalidations],
+            }, now)
+        elif previous_ids - current_ids:
+            session.emit("simulation.route_revalidated", {
+                "map_revision": session.scene_map.revision,
+                "assignment_ids": sorted(previous_ids - current_ids),
+            }, now)
+        return sorted(current_ids - previous_ids), sorted(previous_ids - current_ids)
 
     def set_required_capabilities(self, scenario_id: str, casualty_id: str,
                                   request: RequiredCapabilitiesRequest,
@@ -1574,6 +1833,11 @@ class SimulationStore:
             responder = session.responders[record.responder_id]
             responder.status = session.responder_preferences.pop(record.responder_id, "available")
             session.resolved.add(record.casualty_id)
+            record.route_status = "current"
+            record.invalidated_reason = None
+            record.invalidated_blocks = None
+            session.route_invalidations = [entry for entry in session.route_invalidations
+                                           if entry.assignment_id != record.id]
             session.emit("simulation.responder_released",
                          {"responder_id": responder.id, "status": responder.status,
                           "assignment_id": record.id}, now)
@@ -1610,6 +1874,8 @@ class SimulationStore:
             approvals=[a.model_copy(deep=True) for a in session.approvals.values()],
             dispatches=[d.model_copy(deep=True) for d in session.dispatches.values()],
             assignments=[a.model_copy(deep=True) for a in session.assignments.values()],
+            route_invalidations=[entry.model_copy(deep=True)
+                                 for entry in session.route_invalidations],
             last_recommendation=(session.last_recommendation.model_copy(deep=True)
                                  if session.last_recommendation else None),
         )

@@ -1,0 +1,1156 @@
+{
+  "run_at_utc": "2026-11-14T10:25:34.445Z",
+  "clips": [
+    {
+      "name": "car-crash-head-blood",
+      "origin": "benchmark",
+      "source": "mixkit-blood-car-crash.mp4",
+      "duration_s": 37.3,
+      "people": 4,
+      "checks": [
+        {
+          "check": "blood on head",
+          "samples": 134,
+          "testable": 0.99,
+          "score": 0.56,
+          "regions_seen": [
+            "head"
+          ],
+          "previous": 0.56,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "roses-no-blood",
+      "origin": "benchmark",
+      "source": "pexels-woman-lying-floor.mp4",
+      "duration_s": 23.5,
+      "people": 3,
+      "checks": [
+        {
+          "check": "no false blood",
+          "samples": 82,
+          "testable": 0.91,
+          "score": 0.402,
+          "regions_seen": [
+            "right_arm"
+          ],
+          "previous": 0.402,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "three-lying-no-blood",
+      "origin": "benchmark",
+      "source": "pexels-three-lying-overhead.mp4",
+      "duration_s": 19.8,
+      "people": 3,
+      "checks": [
+        {
+          "check": "no false blood",
+          "samples": 71,
+          "testable": 0.97,
+          "score": 1.0,
+          "regions_seen": [],
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "eyes-closed-man",
+      "origin": "benchmark",
+      "source": "pexels-man-eyes-closed-breathing.mp4",
+      "duration_s": 7.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "eyes closed",
+          "samples": 27,
+          "testable": 0.93,
+          "score": 0.926,
+          "previous": 0.926,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "sleeping-man-eyes",
+      "origin": "benchmark",
+      "source": "pexels-man-sleeping-720.mp4",
+      "duration_s": 28.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "eyes closed",
+          "samples": 107,
+          "testable": 0.56,
+          "score": 0.486,
+          "previous": 0.486,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "sleeping-woman-eyes",
+      "origin": "benchmark",
+      "source": "pexels-woman-sleeping-720.mp4",
+      "duration_s": 25.7,
+      "people": 3,
+      "checks": [
+        {
+          "check": "eyes closed",
+          "samples": 52,
+          "testable": 0.85,
+          "score": 0.846,
+          "previous": 0.846,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "urfall-01-lying",
+      "origin": "benchmark",
+      "source": "fall-01-cam0.mp4",
+      "duration_s": 5.3,
+      "people": 7,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 56,
+          "testable": 0.95,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "urfall-02-lying",
+      "origin": "benchmark",
+      "source": "fall-02-cam0.mp4",
+      "duration_s": 3.7,
+      "people": 5,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 45,
+          "testable": 0.96,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "urfall-03-lying",
+      "origin": "benchmark",
+      "source": "fall-03-cam0.mp4",
+      "duration_s": 7.2,
+      "people": 5,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 54,
+          "testable": 0.96,
+          "score": 0.0,
+          "previous": 0.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "urfall-04-lying",
+      "origin": "benchmark",
+      "source": "fall-04-cam0.mp4",
+      "duration_s": 3.2,
+      "people": 4,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 17,
+          "testable": 0.82,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "urfall-05-lying",
+      "origin": "benchmark",
+      "source": "fall-05-cam0.mp4",
+      "duration_s": 5.0,
+      "people": 5,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 47,
+          "testable": 0.98,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "urfall-06-lying",
+      "origin": "benchmark",
+      "source": "fall-06-cam0.mp4",
+      "duration_s": 3.3,
+      "people": 5,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 32,
+          "testable": 0.94,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "urfall-07-lying",
+      "origin": "benchmark",
+      "source": "fall-07-cam0.mp4",
+      "duration_s": 5.2,
+      "people": 2,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 31,
+          "testable": 1.0,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "urfall-08-lying",
+      "origin": "benchmark",
+      "source": "fall-08-cam0.mp4",
+      "duration_s": 3.0,
+      "people": 3,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 20,
+          "testable": 0.8,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "urfall-09-lying",
+      "origin": "benchmark",
+      "source": "fall-09-cam0.mp4",
+      "duration_s": 6.2,
+      "people": 7,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 58,
+          "testable": 0.98,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "urfall-10-lying",
+      "origin": "benchmark",
+      "source": "fall-10-cam0.mp4",
+      "duration_s": 4.3,
+      "people": 6,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 39,
+          "testable": 0.85,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "mpsc-rr-s1-lying",
+      "origin": "benchmark",
+      "source": "s1_lying.mov",
+      "duration_s": 148.8,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 339,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 339,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "mpsc-rr-s2-lying",
+      "origin": "benchmark",
+      "source": "s2_lying.mov",
+      "duration_s": 176.5,
+      "people": 13,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 587,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 587,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "mpsc-rr-s3-lying",
+      "origin": "benchmark",
+      "source": "s3_lying.mov",
+      "duration_s": 184.7,
+      "people": 6,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 583,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 583,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "mpsc-rr-s5-lying",
+      "origin": "benchmark",
+      "source": "s5_lying.mov",
+      "duration_s": 243.7,
+      "people": 5,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 10,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 10,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "mpsc-rr-s24-lying",
+      "origin": "benchmark",
+      "source": "s24_lying.mov",
+      "duration_s": 192.3,
+      "people": 3,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 24,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 24,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-01-lying",
+      "origin": "benchmark",
+      "source": "sub_01_lying.mp4",
+      "duration_s": 109.3,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 335,
+          "testable": 0.01,
+          "score": 0.012,
+          "rate_median": 8.0,
+          "rate_p10_p90": [
+            8.0,
+            8.0
+          ]
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 335,
+          "testable": 0.01,
+          "score": 1.0,
+          "rate_median": 8.0,
+          "rate_p10_p90": [
+            8.0,
+            8.0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-02-lying",
+      "origin": "benchmark",
+      "source": "sub_02_lying.mp4",
+      "duration_s": 123.2,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 388,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 388,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-03-lying",
+      "origin": "benchmark",
+      "source": "sub_03_lying.mp4",
+      "duration_s": 94.4,
+      "people": 2,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 279,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 279,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-04-lying",
+      "origin": "benchmark",
+      "source": "sub_04_lying.mp4",
+      "duration_s": 152.1,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 496,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 496,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-05-lying",
+      "origin": "benchmark",
+      "source": "sub_05_lying.mp4",
+      "duration_s": 267.4,
+      "people": 15,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 928,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 928,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-06-lying",
+      "origin": "benchmark",
+      "source": "sub_06_lying.mp4",
+      "duration_s": 157.0,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 514,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 514,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-07-lying",
+      "origin": "benchmark",
+      "source": "sub_07_lying.mp4",
+      "duration_s": 147.7,
+      "people": 2,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 216,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 216,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-08-lying",
+      "origin": "benchmark",
+      "source": "sub_08_lying.mp4",
+      "duration_s": 177.3,
+      "people": 14,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 590,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 590,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-09-lying",
+      "origin": "benchmark",
+      "source": "sub_09_lying.mp4",
+      "duration_s": 148.6,
+      "people": 8,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 483,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 483,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-10-lying",
+      "origin": "benchmark",
+      "source": "sub_10_lying.mp4",
+      "duration_s": 161.4,
+      "people": 7,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 531,
+          "testable": 0.03,
+          "score": 0.026,
+          "rate_median": 11.9,
+          "rate_p10_p90": [
+            11.7,
+            12.1
+          ]
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 531,
+          "testable": 0.03,
+          "score": 1.0,
+          "rate_median": 11.9,
+          "rate_p10_p90": [
+            11.7,
+            12.1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-11-lying",
+      "origin": "benchmark",
+      "source": "sub_11_lying.mp4",
+      "duration_s": 148.9,
+      "people": 2,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 358,
+          "testable": 0.01,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 358,
+          "testable": 0.01,
+          "score": 0.994
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-12-lying",
+      "origin": "benchmark",
+      "source": "sub_12_lying.mp4",
+      "duration_s": 176.5,
+      "people": 3,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 586,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 586,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-sub-13-lying",
+      "origin": "benchmark",
+      "source": "sub_13_lying.mp4",
+      "duration_s": 184.7,
+      "people": 86,
+      "checks": [
+        {
+          "check": "breathing motion_detected from 20 s",
+          "samples": 63,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "breathing never no_motion_detected from 20 s",
+          "samples": 63,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-01-04m",
+      "origin": "benchmark",
+      "source": "out_01_04m.mp4",
+      "duration_s": 59.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "samples": 38,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "samples": 23,
+          "testable": 0.39,
+          "score": 1.0,
+          "no_motion_share": 0.39
+        }
+      ]
+    },
+    {
+      "name": "respview-out-01-05m",
+      "origin": "benchmark",
+      "source": "out_01_05m.mp4",
+      "duration_s": 59.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "samples": 38,
+          "testable": 0.79,
+          "score": 0.0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "samples": 23,
+          "testable": 0.83,
+          "score": 1.0,
+          "no_motion_share": 0.83
+        }
+      ]
+    },
+    {
+      "name": "respview-out-01-06m",
+      "origin": "benchmark",
+      "source": "out_01_06m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-01-07m",
+      "origin": "benchmark",
+      "source": "out_01_07m.mp4",
+      "duration_s": 59.4,
+      "people": 2,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-01-11m",
+      "origin": "benchmark",
+      "source": "out_01_11m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-02-04m",
+      "origin": "benchmark",
+      "source": "out_02_04m.mp4",
+      "duration_s": 59.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "samples": 38,
+          "testable": 0.68,
+          "score": 0.684,
+          "rate_median": 27.8,
+          "rate_p10_p90": [
+            26.9,
+            28.5
+          ]
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "samples": 23,
+          "testable": 0.17,
+          "score": 1.0,
+          "no_motion_share": 0.17
+        }
+      ]
+    },
+    {
+      "name": "respview-out-02-06m",
+      "origin": "benchmark",
+      "source": "out_02_06m.mp4",
+      "duration_s": 59.4,
+      "people": 2,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "samples": 26,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "samples": 21,
+          "testable": 0.38,
+          "score": 1.0,
+          "no_motion_share": 0.38
+        }
+      ]
+    },
+    {
+      "name": "respview-out-02-07m",
+      "origin": "benchmark",
+      "source": "out_02_07m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-02-09m",
+      "origin": "benchmark",
+      "source": "out_02_09m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-03-04m",
+      "origin": "benchmark",
+      "source": "out_03_04m.mp4",
+      "duration_s": 59.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "samples": 38,
+          "testable": 0.89,
+          "score": 0.0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "samples": 23,
+          "testable": 1.0,
+          "score": 1.0,
+          "no_motion_share": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-03-05m",
+      "origin": "benchmark",
+      "source": "out_03_05m.mp4",
+      "duration_s": 59.0,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "samples": 38,
+          "testable": 0.63,
+          "score": 0.211,
+          "rate_median": 30.6,
+          "rate_p10_p90": [
+            30.5,
+            30.6
+          ]
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "samples": 23,
+          "testable": 1.0,
+          "score": 1.0,
+          "no_motion_share": 1.0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-03-06m",
+      "origin": "benchmark",
+      "source": "out_03_06m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-03-07m",
+      "origin": "benchmark",
+      "source": "out_03_07m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-03-09m",
+      "origin": "benchmark",
+      "source": "out_03_09m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-03-11m",
+      "origin": "benchmark",
+      "source": "out_03_11m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-03-13m",
+      "origin": "benchmark",
+      "source": "out_03_13m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-04-04m",
+      "origin": "benchmark",
+      "source": "out_04_04m.mp4",
+      "duration_s": 56.0,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "samples": 38,
+          "testable": 0.89,
+          "score": 0.0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "samples": 23,
+          "testable": 0.09,
+          "score": 1.0,
+          "no_motion_share": 0.09
+        }
+      ]
+    },
+    {
+      "name": "respview-out-04-05m",
+      "origin": "benchmark",
+      "source": "out_04_05m.mp4",
+      "duration_s": 59.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "samples": 38,
+          "testable": 0.0,
+          "score": 0.0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "samples": 22,
+          "testable": 0.0,
+          "score": 1.0,
+          "no_motion_share": 0.0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-04-06m",
+      "origin": "benchmark",
+      "source": "out_04_06m.mp4",
+      "duration_s": 59.4,
+      "people": 3,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-04-07m",
+      "origin": "benchmark",
+      "source": "out_04_07m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-04-09m",
+      "origin": "benchmark",
+      "source": "out_04_09m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-04-13m",
+      "origin": "benchmark",
+      "source": "out_04_13m.mp4",
+      "duration_s": 59.4,
+      "people": 0,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "score": null,
+          "samples": 0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "score": null,
+          "samples": 0
+        }
+      ]
+    },
+    {
+      "name": "respview-out-05-05m",
+      "origin": "benchmark",
+      "source": "out_05_05m.mp4",
+      "duration_s": 59.0,
+      "people": 1,
+      "checks": [
+        {
+          "check": "breathing motion_detected at 10-20 s",
+          "samples": 38,
+          "testable": 0.74,
+          "score": 0.0
+        },
+        {
+          "check": "no rate (breath held) at 34-40 s",
+          "samples": 23,
+          "testable": 0.0,
+          "score": 1.0,
+          "no_motion_share": 0.0
+        }
+      ]
+    }
+  ]
+}
