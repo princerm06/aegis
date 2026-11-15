@@ -14,6 +14,19 @@ are not authenticated identities; local records are not a durable audit trail.
 No CV/LLM output is a medical assessment or dispatch authorization. No real
 hardware command path or real emergency dispatch service is implemented.
 
+## Talk link (operator ⇄ responder phone)
+
+`app/api/talk.py` relays WebRTC call setup between the dashboard's **Talk** button
+and the responder's phone page (`/responder`). Only the offer and answer (a few
+KB) pass through; audio goes directly between the two browsers. In memory, no
+recording, no simulation state, no keys or accounts.
+
+- `POST /api/v1/simulations/talk/channels/{responder_id}/heartbeat`: phone page, every 1.5 s; returns any ringing call with its offer
+- `GET /api/v1/simulations/talk/channels/{responder_id}`: dashboard; phone online (heartbeat within 6 s) and the call with the phone's answer
+- `POST …/offer` `{sdp}` starts a call (replaces any earlier one), `POST …/answer` `{session_id, sdp}`, `POST …/hangup` `{session_id, by}`
+
+Stale or ended calls return 409; at most 16 channels.
+
 Optional historical NYC EMS dispatch-duration research is documented in
 `../ml/ems/README.md`. Its read-only simulation advisory defaults to disabled
 and cannot alter coordination, approval, dispatch, clinical or hardware state.

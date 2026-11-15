@@ -4,6 +4,8 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from backend.app.api.ems_dispatch import router as ems_dispatch_router
+from backend.app.api.talk import TalkRelay
+from backend.app.api.talk import router as talk_router
 from backend.app.api.routes import router
 from backend.app.services.ems_dispatch import DEFAULT_CHECKPOINT, EMSDispatchAdvisory
 from backend.app.simulation.routes import router as simulation_router
@@ -24,6 +26,8 @@ def create_app() -> FastAPI:
         checkpoint=Path(os.getenv("AEGIS_EMS_MODEL_DIR", str(DEFAULT_CHECKPOINT))),
     )
     application.include_router(ems_dispatch_router)
+    application.state.talk_relay = TalkRelay()
+    application.include_router(talk_router)
     return application
 
 
