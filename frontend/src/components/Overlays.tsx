@@ -68,6 +68,12 @@ export function SettingsMenu({ flags, onFlags, fallback, onFallback, floorPlan, 
               </span>
               <input type="checkbox" checked={flags.deviceStatus} onChange={(e) => onFlags({ deviceStatus: e.target.checked })} />
             </label>
+            <label className={row}>
+              <span>
+                People on multiple floors <span className="text-faint">· no backend yet</span>
+              </span>
+              <input type="checkbox" checked={flags.multiFloor} onChange={(e) => onFlags({ multiFloor: e.target.checked })} />
+            </label>
 
             <p className="label mb-1 mt-3">Reliability fallback</p>
             <label className={row}>

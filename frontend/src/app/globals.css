@@ -54,6 +54,9 @@
   --map-hatch-line: #33434f;
   --map-unknown: #0d1318;
   --map-cell-line: #121b23;
+  --map-outline: #7f93a6;
+  --map-outline-fill: #121b2299;
+  --map-room-line: #2b3946;
   --map-edit-hover: #2a1c10;
   --map-obstacle: #56687a;
   --map-mark-bg: #0b1117;
@@ -119,6 +122,9 @@
   --map-hatch-line: #b9b3a8;
   --map-unknown: #efece6;
   --map-cell-line: #ebe7e0;
+  --map-outline: #5b6673;
+  --map-outline-fill: #e4ded399;
+  --map-room-line: #b9b3a8;
   --map-edit-hover: #f7e3c4;
   --map-obstacle: #7b8692;
   --map-mark-bg: #ffffff;

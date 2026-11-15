@@ -98,9 +98,33 @@ it does not proxy video.
 An MJPEG endpoint from the perception process with YOLO boxes and track IDs drawn, e.g.
 `http://127.0.0.1:5000/stream.mjpg`. Paste it into the building camera tile's source today.
 
----
+## 7. Building floor per position  *(priority: medium — multi-floor building map)*
 
-### Already integrated (no request needed)
+**Why:** the Command Center now has building floor plans (L1 ground, L3) and a floor picker that
+shows how many people are detected on each floor. The contract has no floor: every `Position`
+shares the scenario `frame_id`, and the occupancy grid / A* routes describe one floor. Today the UI
+puts everyone on L1 (the routing floor); a PREVIEW flag spreads people over floors with mock data
+(`src/lib/floors.ts`).
+
+**Ask:** an optional `floor_id` on `Position` (e.g. `"L1"`, `"L3"`), set from the camera/zone that
+produced the observation or from the responder's reported position, plus a `floor_id` on
+`OccupancyGrid` so routing knows which floor it covers (cross-floor routing can come later).
+
+## 8. Safe shared map updates  *(priority: medium — building walls / Block route)*
+
+**Why:** building walls publish a new routing map through `PUT /map`. The dashboard re-reads the
+live revision right before publishing and aborts if it changed, but two operators can still race
+in the gap between that read and the write.
+
+**Ask:**
+
+- An optional `if_revision` on `PUT /map` (or an `If-Match` header carrying the current map
+  revision): reject with 409 when the live map is no longer that revision.
+- Planner endpoint snapping: when a responder or casualty position touches a blocked cell, plan
+  from/to the nearest free cell within a small radius and report the snap in the route. Today the
+  UI can only flag "NO ROUTE (ON WALL)" for casualties (no API moves them) and offer an opt-in
+  demo correction for responders. Walls are never opened under people.
+ (no request needed)
 
 - Camera observed signs (`aegis-cv-signs/0.1`): shown per victim with source, value, confidence,
   observed time/age, `not_testable`, stale; literal wording per `docs/CAMERA_SIGNS_INTEGRATION.md`.

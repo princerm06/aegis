@@ -15,10 +15,12 @@ import type { SimulationState } from "./types";
 export interface PreviewFlags {
   sensorVitals: boolean;
   deviceStatus: boolean;
+  /** Mock floor assignments (backend has no floor field yet) — see src/lib/floors.ts. */
+  multiFloor: boolean;
 }
 
 const KEY = "aegis.preview";
-const DEFAULT: PreviewFlags = { sensorVitals: false, deviceStatus: false };
+const DEFAULT: PreviewFlags = { sensorVitals: false, deviceStatus: false, multiFloor: false };
 
 export function usePreviewFlags() {
   const [flags, setFlags] = useState<PreviewFlags>(DEFAULT);
@@ -40,7 +42,7 @@ export function usePreviewFlags() {
       }
       return next;
     });
-  const anyOn = flags.sensorVitals || flags.deviceStatus;
+  const anyOn = flags.sensorVitals || flags.deviceStatus || flags.multiFloor;
   return { flags, set, anyOn };
 }
 

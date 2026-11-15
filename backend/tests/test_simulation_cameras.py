@@ -152,6 +152,10 @@ def test_explicit_association_required_and_no_cross_camera_reid(client, clock):
     {k: v for k, v in CALIBRATED.items() if k != "mode"},
     {k: v for k, v in CALIBRATED.items() if k != "actor"},
     {**CALIBRATED, "homography": [1, 0, 0]},
+    {**CALIBRATED, "stream_url": "javascript:alert(1)"},
+    {**CALIBRATED, "stream_url": "file:///etc/passwd"},
+    {**CALIBRATED, "stream_url": "http://user:secret@10.0.0.5:8090/stream.mjpg"},
+    {**CALIBRATED, "stream_url": "http://10.0.0.5/" + "x" * 500},
 ])
 def test_invalid_registrations_rejected(client, body):
     assert register(client, "cam-x", body).status_code == 422
@@ -170,6 +174,28 @@ def test_registration_is_immutable_within_epoch(client):
     assert replay.json()["result"]["registered_by"] == "operator-1"
     assert register(client, "cam-a", {**CALIBRATED, "calibration_ref": "other"}).status_code == 409
     assert register(client, "cam-a", ZONES).status_code == 409
+
+
+def test_stream_url_is_listed_and_follows_the_latest_registration(client):
+    first = "http://192.168.137.145:8090/stream.mjpg"
+    assert register(client, "cam-a", {**ZONES, "stream_url": first}).status_code == 200
+    assert [c["stream_url"] for c in state(client)["cameras"]] == [first]
+    replay = register(client, "cam-a", {**ZONES, "stream_url": first})
+    assert replay.json()["duplicate"] is True
+
+    moved = "https://askar-mac.example.ts.net/stream.mjpg"
+    sequence = state(client)["sequence"]
+    update = register(client, "cam-a", {**ZONES, "actor": "operator-2", "stream_url": moved})
+    assert update.status_code == 200 and update.json()["duplicate"] is False
+    assert update.json()["result"]["registered_by"] == "operator-1"     # the mapping record is kept
+    after = state(client)
+    assert [c["stream_url"] for c in after["cameras"]] == [moved] and after["sequence"] > sequence
+    events = client.get(f"{BASE}/events", params={"limit": 1000}).json()["events"]
+    assert [e["payload"]["stream_url"] for e in events if e["type"] == "simulation.camera_registered"] == [first, moved]
+
+    assert register(client, "cam-a", ZONES).json()["result"]["stream_url"] is None   # stopped serving
+    assert register(client, "cam-a", {**CALIBRATED, "stream_url": moved}).status_code == 409   # mapping still fixed
+    assert register(client, "cam-b", CALIBRATED).json()["result"]["stream_url"] is None
 
 
 def test_camera_observation_rejections(client, clock):

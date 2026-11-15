@@ -128,17 +128,22 @@ class SimulateDeviceRequest(SimulationRequest):
 
 NonblankIdentifier = Annotated[str, Field(min_length=1, pattern=r"\S")]
 Confidence = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
+# Plain http(s) address of the camera's live view; no credentials in the authority.
+StreamUrl = Annotated[str, Field(max_length=500, pattern=r"^https?://[^\s/@]+(/\S*)?$")]
 
 
 class CameraRegistration(ContractModel):
     """SIMULATION camera mapping. ``calibration_ref`` is a human/external
-    assertion that a world calibration exists; the backend computes nothing."""
+    assertion that a world calibration exists; the backend computes nothing.
+    ``stream_url`` is where dashboards can show the camera's live view; unlike
+    the mapping it follows the latest registration (a restarted camera may move)."""
 
     mode: SimulationMode
     actor: Identifier
     mapping_mode: Literal["calibrated_world", "predefined_zones"]
     calibration_ref: NonblankIdentifier | None = None
     zones: dict[NonblankIdentifier, Position] | None = None
+    stream_url: StreamUrl | None = None
 
     @model_validator(mode="after")
     def validate_mapping(self) -> "CameraRegistration":
@@ -187,6 +192,7 @@ class CameraRecord(ContractModel):
     zones: dict[str, Position] | None
     registered_by: Identifier
     registered_at: AwareDatetime
+    stream_url: str | None = None
 
 
 class CameraProvenance(ContractModel):

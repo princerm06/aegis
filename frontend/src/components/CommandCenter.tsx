@@ -11,12 +11,16 @@ import { proposalDiff } from "@/lib/insights";
 import { getInvalidatedAssignments } from "@/lib/routeInvalidation";
 import { useDeviceStatus, usePreviewFlags, useSensorVitals } from "@/lib/preview";
 import { buildReport, download } from "@/lib/report";
-import type { ActionResponse, SceneMap as SceneMapT, SimulationApproval, SimulationProposal } from "@/lib/types";
+import type { ActionResponse, EventEnvelope, SceneMap as SceneMapT, SimulationApproval, SimulationProposal, SimulationState } from "@/lib/types";
 import { useAlerts } from "@/lib/useAlerts";
 import { useSimulation, type LinkStatus } from "@/lib/useSimulation";
 import { CameraView, cameraFeeds } from "./CamGrid";
 import { FeedFrame, useFeedOrder, useSlotRects } from "./FeedStage";
 import { FEED_STATUS_LABEL, MAP_FEED_ID, type FeedStatus } from "@/lib/feeds";
+import { FloorPicker } from "./FloorPicker";
+import { ROUTING_FLOOR, floorAssignments, floorById, floorSummaries } from "@/lib/floors";
+import { isBuildingMap, peopleOnWalls, planBuildingWalls, planRestore, type RestorePlan, type WallsBackup, type WallsPlan } from "@/lib/buildingMap";
+import { WallsDialog, type WallsConfirm } from "./WallsDialog";
 import { CommandDock } from "./CommandDock";
 import { CommsPanel } from "./CommsPanel";
 import { LoopStrip } from "./LoopStrip";
@@ -66,6 +70,9 @@ export function CommandCenter() {
   }, [drawer]);
   const [help, setHelp] = useState(false);
   const [floorPlan, setFloorPlanState] = useState<FloorPlan>(null);
+  const [floor, setFloor] = useState(ROUTING_FLOOR); // floor shown on the scene map
+  // Building walls are published/removed only by an explicit, confirmed operator action.
+  const [wallsDialog, setWallsDialog] = useState<null | { mode: "loading" } | { mode: "on"; plan: WallsPlan } | { mode: "off"; restore: RestorePlan }>(null);
   const [operator, setOperator] = useState("demo-command");
 
   const proposal = state?.current_proposal_id ? state.proposals.find((p) => p.id === state.current_proposal_id) ?? null : null;
@@ -143,8 +150,123 @@ export function CommandCenter() {
     [readOnly, run, toast],
   );
 
+  // Building walls → routing grid. Opening the dashboard never changes the shared map: the operator
+  // opens a dialog (live state + shared history are fetched fresh), reviews, and confirms. Right
+  // before publishing, the live map revision is re-checked; if anyone changed it meanwhile, nothing
+  // is published.
+  const liveMap = sim.state?.scenario.scene_map ?? null;
+  const wallsActive = isBuildingMap(liveMap);
+  const BACKUP_KEY = "aegis.wallsBackup";
+  const readBackup = (): WallsBackup | null => {
+    try {
+      return JSON.parse(localStorage.getItem(BACKUP_KEY) ?? "null") as WallsBackup | null;
+    } catch {
+      return null;
+    }
+  };
+  const allEvents = async () => {
+    const out: EventEnvelope[] = [];
+    let after = 0;
+    for (let page = 0; page < 20; page++) {
+      const p = await api.events(after, 1000);
+      out.push(...p.events);
+      if (p.events.length < 1000) break;
+      after = p.events[p.events.length - 1].sequence;
+    }
+    return out;
+  };
+
+  const openWalls = async () => {
+    if (readOnly) return;
+    setWallsDialog({ mode: "loading" });
+    try {
+      const fresh = await api.state();
+      if (isBuildingMap(fresh.scenario.scene_map)) setWallsDialog({ mode: "off", restore: planRestore(fresh, await allEvents(), readBackup()) });
+      else {
+        const plan = planBuildingWalls(fresh, ROUTING_FLOOR);
+        if (!plan) throw new Error("No wall grid for the routing floor");
+        setWallsDialog({ mode: "on", plan });
+      }
+    } catch (e) {
+      setWallsDialog(null);
+      toast("error", `Couldn't check the live map: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const confirmWalls = async (c: WallsConfirm) => {
+    const d = wallsDialog;
+    if (!d || d.mode === "loading") return;
+    let fresh: SimulationState;
+    try {
+      fresh = await api.state();
+    } catch (e) {
+      toast("error", `Couldn't re-check the live map: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    const liveRev = fresh.scenario.scene_map?.revision ?? null;
+    const expected = d.mode === "on" ? d.plan.baseRevision : d.restore.ok ? d.restore.liveRevision : null;
+    if (liveRev !== expected) {
+      setWallsDialog(null);
+      toast("error", `The map changed while this was open (${expected ?? "none"} → ${liveRev ?? "none"}). Nothing was published; open Walls again to review.`);
+      return;
+    }
+    setWallsDialog(null);
+    if (d.mode === "on") {
+      const { plan } = d;
+      if (plan.incompatible && !c.replace) return;
+      const r = await act("Building walls", () => api.updateMap(plan.map));
+      if (!r) return;
+      try {
+        if (fresh.scenario.scene_map)
+          localStorage.setItem(BACKUP_KEY, JSON.stringify({ map: fresh.scenario.scene_map, buildingRevision: plan.map.revision, epoch: fresh.epoch } satisfies WallsBackup));
+      } catch {
+        /* the shared event log is the primary restore source */
+      }
+      const moved: string[] = [];
+      for (const id of c.snap) {
+        const p = plan.onWalls.find((x) => x.id === id && x.kind === "responder" && x.snap);
+        if (!p?.snap) continue;
+        const m = await act("Position correction", () => api.moveResponder(id, p.snap!));
+        if (m) moved.push(responderName(fresh, id));
+      }
+      const stuck = plan.onWalls.filter((p) => !moved.includes(responderName(fresh, p.id))).length;
+      toast(
+        "info",
+        `Routing follows ${floorById(ROUTING_FLOOR).short} walls and doors${moved.length ? ` · moved ${moved.join(", ")} (demo correction)` : ""}${stuck ? ` · ${stuck} on a wall line without a route` : ""}`,
+      );
+    } else if (d.restore.ok) {
+      const { restore } = d;
+      if (restore.laterEdits.length && !c.discardEdits) return;
+      const r = await act("Restore map", () => api.updateMap(restore.map));
+      if (!r) return;
+      try {
+        localStorage.removeItem(BACKUP_KEY);
+      } catch {
+        /* ignore */
+      }
+      toast("info", `Walls off · restored map ${restore.map.revision} (${restore.source === "server-history" ? "shared history" : "browser backup"})`);
+    }
+  };
+
+  // People the planner cannot route to/from on the live grid (standing on a wall or blocked cell).
+  const noRouteIds = useMemo(() => {
+    const g = state?.scenario.scene_map?.occupancy_grid;
+    return state && g ? new Set(peopleOnWalls(state, g).map((p) => p.id)) : new Set<string>();
+  }, [state]);
+
+  // Floors: which floor each person is on, and who is detected where (drives the floor picker).
+  const floorOf = useMemo(() => floorAssignments(state, flags.multiFloor), [state, flags.multiFloor]);
+  const floorStats = useMemo(() => floorSummaries(state, floorOf), [state, floorOf]);
+  const visibleIds = useMemo(() => new Set(Object.keys(floorOf).filter((id) => floorOf[id] === floor)), [floorOf, floor]);
+  const onRoutingFloor = floor === ROUTING_FLOOR;
+  const floorDef = floorById(floor);
+  // A plan image uploaded in Settings is calibrated to the routing grid, so it only shows on that floor.
+  const shownPlan = onRoutingFloor ? floorPlan : null;
+
   const select = (id: string | null) => {
     setSelected(id);
+    // Selecting someone (victim strip, camera, map) shows the floor they're on.
+    if (id && floorOf[id] && floorOf[id] !== floor) setFloor(floorOf[id]);
     if (id && fighters.some((r) => r.id === id)) setFighterId(id);
   };
 
@@ -199,9 +321,21 @@ export function CommandCenter() {
   const [camStatus, setCamStatus] = useState<Record<string, FeedStatus>>({});
   const onCamStatus = useCallback((id: string, s: FeedStatus) => setCamStatus((p) => (p[id] === s ? p : { ...p, [id]: s })), []);
   // Map tools need the map on screen: bring it back to the primary viewport when they're switched on.
+  // They also only apply to the floor the routing grid describes.
   useEffect(() => {
     if ((placing || editMap) && primaryId !== MAP_FEED_ID) swapFeed(MAP_FEED_ID);
-  }, [placing, editMap, primaryId, swapFeed]);
+    if ((placing || editMap) && floor !== ROUTING_FLOOR) setFloor(ROUTING_FLOOR);
+  }, [placing, editMap, primaryId, swapFeed, floor]);
+
+  /** Floor picker: show that floor on the main panel (bringing the map to the primary viewport). */
+  const showFloor = (id: string) => {
+    setFloor(id);
+    if (id !== ROUTING_FLOOR) {
+      setPlacing(false);
+      setEditMap(false);
+    }
+    if (primaryId !== MAP_FEED_ID) swapFeed(MAP_FEED_ID);
+  };
 
   // Keyboard shortcuts (ignored while typing). Space is handled by push-to-talk.
   useEffect(() => {
@@ -279,6 +413,10 @@ export function CommandCenter() {
           <section className="panel relative flex h-full min-h-0 flex-col" aria-label="Scene map">
             <div className="flex items-center gap-2 border-b border-line px-2.5 py-1">
               <h2 className="label !text-text">Scene map</h2>
+              <span className="mono shrink-0 rounded-[2px] border border-line-strong px-1 text-[9.5px] font-semibold text-text" data-map-floor={floor}>
+                {floorDef.short}
+                {primary ? ` · ${floorDef.name}` : ""}
+              </span>
               <span className="mono shrink-0 text-[9.5px] font-semibold tracking-[0.12em]" style={{ color: mapStatus.color }} data-feed-status={mapStatus.status}>
                 {mapStatus.label}
               </span>
@@ -293,13 +431,29 @@ export function CommandCenter() {
                   size="sm"
                   variant={placing ? "warn" : "ghost"}
                   disabled={busy || !activeFighter}
+                  title={onRoutingFloor ? "Shortcut: M" : `Positions are on the ${floorById(ROUTING_FLOOR).short} routing grid — switches floor`}
                   onClick={() => {
                     setPlacing((v) => !v);
                     setEditMap(false);
                   }}
-                  title="Shortcut: M"
                 >
                   {placing ? "Click map…" : `Mark ${responderName(state, activeFighter ?? "")}`}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={wallsActive ? "primary" : "ghost"}
+                  disabled={busy || wallsDialog !== null}
+                  aria-pressed={wallsActive}
+                  onClick={() => void openWalls()}
+                  title={
+                    wallsActive
+                      ? "Building walls are the routing map. Click to review restoring the previous map."
+                      : `Review routing around ${floorById(ROUTING_FLOOR).short} building walls (doors only). Changes the shared map only after you confirm.`
+                  }
+                  data-testid="walls-toggle"
+                  data-walls={wallsActive ? "on" : "off"}
+                >
+                  {wallsActive ? "Walls on" : "Walls off"}
                 </Button>
                 <Button
                   size="sm"
@@ -334,10 +488,18 @@ export function CommandCenter() {
                 onPlace={placing ? place : null}
                 focusResponderId={activeFighter}
                 ghostRoutes={diff?.ghostRoutes}
-                floorPlan={floorPlan}
+                floorPlan={shownPlan}
                 flashing={flashing}
+                visibleIds={visibleIds}
+                noRouteIds={noRouteIds}
+                outline={floorDef.outline}
+                showRouting={onRoutingFloor}
+                floorLabel={`${floorDef.short} ${floorDef.name}`}
               />
             </div>
+            {primary && !onRoutingFloor && floorStats[floor].victims + floorStats[floor].detections + floorStats[floor].responders === 0 && (
+              <p className="mono pointer-events-none absolute inset-x-0 top-1/2 text-center text-[11px] text-muted">No one detected on {floorDef.short}.</p>
+            )}
             {primary && <MapLegend ghost={!!diff?.ghostRoutes.length} invalidated={invalidatedRoutes.length > 0} />}
           </section>
   );
@@ -415,7 +577,7 @@ export function CommandCenter() {
       {(fallback || previewOn) && (
         <div className="sim-stripe flex items-center gap-3 rounded border border-warn/50 px-3 py-0.5 text-[11px] text-warn">
           {fallback && <b>FALLBACK — seeded scenario, not live. Actions disabled.</b>}
-          {previewOn && <span>PREVIEW DATA ON — {[flags.sensorVitals && "sensor heart rate", flags.deviceStatus && "device status"].filter(Boolean).join(", ")} are mock values.</span>}
+          {previewOn && <span>PREVIEW DATA ON — {[flags.sensorVitals && "sensor heart rate", flags.deviceStatus && "device status", flags.multiFloor && "floor assignments"].filter(Boolean).join(", ")} are mock values.</span>}
           {fallback && (
             <button onClick={() => setFallback(false)} className="ml-auto underline">
               return to live
@@ -483,6 +645,13 @@ export function CommandCenter() {
           neuralSummary={neuralBadge}
         />
 
+        {/* Floor picker pinned to the primary viewport's top-left, whichever feed is there. */}
+        {rects[0] && (
+          <div className="absolute z-30" style={{ left: rects[0].x + 8, top: rects[0].y + (primaryId === MAP_FEED_ID && (editMap || placing) ? 52 : 30) }}>
+            <FloorPicker floor={floor} summaries={floorStats} preview={flags.multiFloor} onSelect={showFloor} />
+          </div>
+        )}
+
         {/* Feed layer: every feed stays mounted in a fixed DOM order; a swap only moves it over another slot. */}
         {feedIds.map((id) => {
           const slot = order.indexOf(id);
@@ -538,6 +707,16 @@ export function CommandCenter() {
       )}
 
       {help && <ShortcutHelp onClose={() => setHelp(false)} />}
+      {wallsDialog && (
+        <WallsDialog
+          {...wallsDialog}
+          floorLabel={floorById(ROUTING_FLOOR).short}
+          nameOf={(id) => (fighters.some((r) => r.id === id) ? responderName(state, id) : shortId(id))}
+          busy={pending !== null}
+          onCancel={() => setWallsDialog(null)}
+          onConfirm={(c) => void confirmWalls(c)}
+        />
+      )}
       <AlertStack alerts={alerts} onDismiss={dismiss} />
 
       <div className="pointer-events-none fixed bottom-3 left-1/2 z-50 flex w-[28rem] -translate-x-1/2 flex-col gap-2">

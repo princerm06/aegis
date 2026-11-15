@@ -3,6 +3,7 @@
 import { useMemo, useRef } from "react";
 import { SEVERITY_META, ageSeconds, meters, shortId, trackLabel } from "@/lib/format";
 import { getInvalidatedAssignments, isRouteStale } from "@/lib/routeInvalidation";
+import type { FloorOutline } from "@/lib/floorOutlines";
 import type { AStarRoute, AssignmentStatus, SimulationProposal, SimulationState } from "@/lib/types";
 
 const STALE_S = 30; // backend observation freshness window
@@ -36,9 +37,19 @@ interface Props {
   /** Optional floor-plan image stretched over the map bounds. */
   floorPlan?: { url: string; opacity: number } | null;
   flashing?: Set<string>;
+  /** Only these entity ids (casualties, tracks, responders) are drawn; null/undefined draws everyone. */
+  visibleIds?: Set<string> | null;
+  /** Draw the occupancy grid, obstacles and routes (false on floors the routing grid doesn't describe). */
+  showRouting?: boolean;
+  /** Floor name shown in the map caption. */
+  floorLabel?: string;
+  /** People the planner cannot route to/from (standing on a wall or blocked cell): labelled NO ROUTE. */
+  noRouteIds?: Set<string>;
+  /** Simplified building outline drawn on the floor (cells over the map bounds, row 0 = north edge). */
+  outline?: FloorOutline | null;
 }
 
-export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onToggleCell, now, onPlace, focusResponderId, ghostRoutes = [], floorPlan, flashing }: Props) {
+export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onToggleCell, now, onPlace, focusResponderId, ghostRoutes = [], floorPlan, flashing, visibleIds, showRouting = true, floorLabel, outline, noRouteIds }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const scene = state.scenario;
   const grid = scene.scene_map?.occupancy_grid ?? null;
@@ -65,7 +76,9 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
   const Y = (y: number) => bounds.h - (y - bounds.y0); // +y is north/up on the shared map
   const path = (r: AStarRoute) => r.waypoints.map((p, i) => `${i ? "L" : "M"}${X(p.x_m)},${Y(p.y_m)}`).join(" ");
 
+  const vis = (id: string) => !visibleIds || visibleIds.has(id);
   const activeTasks = state.assignments.filter((a) => a.status !== "completed");
+  const drawnTasks = showRouting ? activeTasks.filter((a) => vis(a.casualty_id)) : [];
   const taskByCasualty = new Map(activeTasks.map((a) => [a.casualty_id, a]));
   const invalidated = useMemo(() => getInvalidatedAssignments(state), [state]);
   const invalidatedIds = useMemo(() => new Set(invalidated.map((i) => i.assignment.id)), [invalidated]);
@@ -74,9 +87,46 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
     [invalidated],
   );
   const mapRevision = scene.scene_map?.revision;
-  const proposed = proposal && proposal.status !== "dispatched" ? proposal.assignments : [];
+  const proposed = showRouting && proposal && proposal.status !== "dispatched" ? proposal.assignments.filter((a) => vis(a.casualty_id)) : [];
   const resolved = new Set(state.resolved_casualty_ids);
   const trackByCasualty = new Map(state.tracks.filter((t) => t.casualty_id).map((t) => [t.casualty_id!, t]));
+
+  // Fine grids (building walls at 0.25 m) are drawn as one path of blocked cells, not a rect per cell.
+  const fine = !!grid && grid.width * grid.height > 2500;
+  // Cells that are walls in the drawn outline are already shown as outline lines; only draw extra
+  // blocked cells (operator "Block route" edits) so the map stays clean.
+  const fineBlocked = useMemo(() => {
+    if (!grid || !fine) return "";
+    const r = grid.resolution_m;
+    const drawn = (row: number, col: number) =>
+      !!outline && outline.walls.length === grid.height && outline.walls[grid.height - 1 - row]?.[col] === "#";
+    const extra = (row: number, col: number) => grid.cells[row * grid.width + col] !== 0 && !drawn(row, col);
+    let d = "";
+    for (let row = 0; row < grid.height; row++) {
+      for (let col = 0; col < grid.width; col++) {
+        if (!extra(row, col)) continue;
+        let end = col;
+        while (end + 1 < grid.width && extra(row, end + 1)) end++;
+        const x = grid.origin.x_m + col * r - bounds.x0;
+        const y = bounds.h - (grid.origin.y_m + (row + 1) * r - bounds.y0);
+        d += `M${x},${y}h${(end - col + 1) * r}v${r}h${-(end - col + 1) * r}z`;
+        col = end;
+      }
+    }
+    return d;
+  }, [grid, fine, bounds, outline]);
+  const fineCellAt = (clientX: number, clientY: number): [number, number] | null => {
+    if (!grid || !svgRef.current) return null;
+    const pt = svgRef.current.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const m = svgRef.current.getScreenCTM();
+    if (!m) return null;
+    const p = pt.matrixTransform(m.inverse());
+    const col = Math.floor((p.x + bounds.x0 - grid.origin.x_m) / grid.resolution_m);
+    const row = Math.floor((bounds.h - p.y + bounds.y0 - grid.origin.y_m) / grid.resolution_m);
+    return col >= 0 && col < grid.width && row >= 0 && row < grid.height ? [row, col] : null;
+  };
 
   const ticks = (len: number, step: number) => Array.from({ length: Math.floor(len / step) + 1 }, (_, i) => i * step);
 
@@ -119,8 +169,50 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
         <image href={floorPlan.url} x={0} y={0} width={bounds.w} height={bounds.h} preserveAspectRatio="none" opacity={floorPlan.opacity} pointerEvents="none" />
       )}
 
+      {/* building outline: footprint fill, room outlines, perimeter */}
+      {outline && (
+        <g pointerEvents="none" data-outline-cells={outline.cells} data-outline-rooms={outline.rooms}>
+          <path d={outline.fill} fill="var(--map-outline-fill)" />
+          {!showRouting && (
+            <g stroke="var(--map-cell-line)" strokeWidth={0.02}>
+              {ticks(bounds.w, 1).map((t) => (
+                <line key={`gx${t}`} x1={t} y1={0} x2={t} y2={bounds.h} />
+              ))}
+              {ticks(bounds.h, 1).map((t) => (
+                <line key={`gy${t}`} x1={0} y1={t} x2={bounds.w} y2={t} />
+              ))}
+            </g>
+          )}
+          <path d={outline.roomEdges} fill="none" stroke="var(--map-room-line)" strokeWidth={0.04} strokeLinecap="square" />
+          <path d={outline.perimeter} fill="none" stroke="var(--map-outline)" strokeWidth={0.1} strokeLinecap="square" />
+        </g>
+      )}
+
       {/* occupancy grid */}
-      {grid &&
+      {showRouting && grid && fine && (
+        <g data-routing-grid="fine" data-blocked-cells={grid.cells.filter((v) => v !== 0).length}>
+          <path d={fineBlocked} fill="url(#hatch)" stroke="var(--map-obstacle)" strokeWidth={0.03} pointerEvents="none" />
+          {editMode && (
+            <rect
+              x={0}
+              y={0}
+              width={bounds.w}
+              height={bounds.h}
+              fill="transparent"
+              className="cursor-crosshair"
+              onClick={(e) => {
+                e.stopPropagation();
+                const cell = fineCellAt(e.clientX, e.clientY);
+                if (cell) onToggleCell(cell[0], cell[1]);
+              }}
+            />
+          )}
+        </g>
+      )}
+
+      {showRouting &&
+        grid &&
+        !fine &&
         grid.cells.map((v, i) => {
           const col = i % grid.width;
           const row = Math.floor(i / grid.width);
@@ -153,7 +245,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
         })}
 
       {/* obstacle outlines */}
-      {scene.scene_map?.obstacles.map((o) => (
+      {showRouting && scene.scene_map?.obstacles.map((o) => (
         <polygon
           key={o.id}
           points={o.vertices.map((v) => `${X(v.x_m)},${Y(v.y_m)}`).join(" ")}
@@ -177,7 +269,8 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
           </text>
         ))}
         <text x={bounds.w} y={-0.45} textAnchor="end" letterSpacing={0.05}>
-          {scene.frame_id} · meters · map {scene.scene_map?.revision ?? "none"}
+          {floorLabel ? `${floorLabel} · ` : ""}
+          {scene.frame_id} · meters · {showRouting ? `map ${scene.scene_map?.revision ?? "none"}` : "no routing grid on this floor"}
         </text>
         <text x={0} y={-0.45} fill="var(--muted)">
           N ↑
@@ -185,7 +278,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
       </g>
 
       {/* active (dispatched) routes: invalidated and stale routes render as history */}
-      {activeTasks.map((a) => {
+      {drawnTasks.map((a) => {
         if (!a.route) return null;
         const isInvalid = invalidatedIds.has(a.id);
         const stale = !isInvalid && isRouteStale(a.route, mapRevision);
@@ -248,7 +341,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
       })}
 
       {/* advisory alternatives for invalidated routes (require new approval) */}
-      {alternatives.map((r, i) => (
+      {showRouting && alternatives.map((r, i) => (
         <path
           key={`alt-${i}`}
           d={path(r)}
@@ -264,7 +357,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
       ))}
 
       {/* replaced proposal (for comparison) */}
-      {ghostRoutes.map((g, i) => (
+      {showRouting && ghostRoutes.map((g, i) => (
         <path
           key={`ghost-${i}`}
           d={path(g)}
@@ -307,7 +400,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
       )}
 
       {/* CV track boxes (labels render in a later pass, on top of markers) */}
-      {state.tracks.map((t) => {
+      {state.tracks.filter((t) => vis(t.track_id)).map((t) => {
         const o = t.latest_observation;
         const stale = ageSeconds(o.observed_at, now) > STALE_S || (t.latest_observation.track?.state ?? "visible") !== "visible";
         const linked = !!t.casualty_id;
@@ -318,6 +411,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
         return (
           <g
             key={t.track_id}
+            data-entity="track"
             opacity={stale ? 0.55 : 0.35 + 0.65 * o.confidence}
             onClick={(e) => {
               e.stopPropagation();
@@ -345,7 +439,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
       })}
 
       {/* casualties */}
-      {scene.casualties.map((c) => {
+      {scene.casualties.filter((c) => vis(c.id)).map((c) => {
         const sev = c.medical_assessment?.severity ?? "unassessed";
         const meta = SEVERITY_META[sev];
         const x = X(c.position.x_m);
@@ -358,6 +452,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
         return (
           <g
             key={c.id}
+            data-entity="casualty"
             onClick={(e) => {
               e.stopPropagation();
               onSelect(c.id);
@@ -391,6 +486,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
               {meta.label.toUpperCase()}
               {stale ? " · STALE" : ""}
               {task ? ` · ${task.status.toUpperCase()}` : ""}
+              {showRouting && noRouteIds?.has(c.id) ? " · NO ROUTE (ON WALL)" : ""}
             </text>
           </g>
         );
@@ -398,7 +494,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
 
       {/* unlinked CV labels: own pass so text sits above markers; staggered sides, flipped below near the top edge */}
       <g pointerEvents="none" className="mono" fontSize={0.42}>
-        {state.tracks.map((t, i) => {
+        {state.tracks.filter((t) => vis(t.track_id)).map((t, i) => {
           if (t.casualty_id) return null;
           const o = t.latest_observation;
           const stale = ageSeconds(o.observed_at, now) > STALE_S || (o.track?.state ?? "visible") !== "visible";
@@ -424,7 +520,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
       </g>
 
       {/* responders */}
-      {scene.responders.map((r) => {
+      {scene.responders.filter((r) => vis(r.id)).map((r) => {
         const x = X(r.position.x_m);
         const y = Y(r.position.y_m);
         const color = r.status === "available" ? "var(--accent)" : r.status === "busy" ? "var(--warn)" : "var(--faint)";
@@ -436,6 +532,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
         return (
           <g
             key={r.id}
+            data-entity="responder"
             onClick={(e) => {
               e.stopPropagation();
               onSelect(r.id);
@@ -461,6 +558,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
               {...HALO}
             >
               {shortId(r.id)} · {RESPONDER_SHORT[r.status]}
+              {showRouting && noRouteIds?.has(r.id) ? " · NO ROUTE (ON WALL)" : ""}
             </text>
           </g>
         );
@@ -468,3 +566,4 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
     </svg>
   );
 }
+

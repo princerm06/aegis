@@ -50,3 +50,6 @@ signs:
 
 publisher:
   camera_id: room-cam-1
+  # The venue hotspot answers in 2-5 s (30 KB/s); 1.5 s gave up on every request.
+  # Sends run off the camera loop and keep only the newest report per person.
+  timeout_s: 8.0
