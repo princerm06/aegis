@@ -17,6 +17,9 @@ application.include_router(simulation_router)
 
 Demo scenario id: **`demo`** (loaded lazily on first use, or via reset). Other
 IDs must be reset with a supplied synthetic `scenario` whose `id` matches.
+With `AEGIS_DEMO_CAMERA_ONLY=true` in the backend's environment, `demo` loads
+with no synthetic casualties (responders kept): every casualty is a camera
+track the operator confirms, and the dashboard's Reset returns to that empty scene.
 
 ## Routes — prefix `/api/v1/simulations/{scenario_id}`
 
