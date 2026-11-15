@@ -10,7 +10,8 @@
     "smoke": "node scripts/smoke.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test scripts/test-route-invalidation.mjs",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "e2e:ems": "node scripts/e2e-ems.mjs"
   },
   "dependencies": {
     "framer-motion": "11.18.2",
