@@ -12,13 +12,14 @@ responder learns once where to look and reads it from across the room:
 
 The ring is the state: white = observed, amber = notable (no chest motion,
 eyes closed, no response, blood seen), dashed grey = the camera cannot tell or
-nothing was asked yet, cyan = in progress (breathing being measured fills the
-ring; after a spoken command the ring drains while the camera watches for a
-response). When breathing cannot be measured, one grey line under the gauges
-says why. A trailing "?" marks a low detector confidence. Colors mark
-observations, not severity: nothing here is a diagnosis or a priority. The
-pulse is an estimate from skin colour (signs/pulse.py), shown only for a still
-person with a big enough face and a clear rhythm. Up to two short notes
+nothing was asked yet, cyan = in progress (after a spoken command the ring
+drains while the camera watches for a response). The breathing and pulse
+gauges only appear once the camera has a reading (a breathing rate, no chest
+motion, a pulse estimate); while either is being measured one grey line says
+"Measuring ..., keep still". A trailing "?" marks a low detector confidence.
+Colors mark observations, not severity: nothing here is a diagnosis or a
+priority. The pulse is an estimate from skin colour (signs/pulse.py), shown
+only for a still person with a big enough face and a clear rhythm. Up to two short notes
 under the gauges say what happened ("Fall seen 1:20 ago", "Waving now"). A
 person who just left the picture keeps a small "NOT IN VIEW" chip for a few
 seconds, then the top bar lists them with room and time ("3 ROOM 2 2:10").
@@ -125,17 +126,17 @@ class Card:
     """What one person's card shows, from one signs snapshot."""
 
     movement: Line
-    breathing: Gauge
+    breathing: Gauge | None           # None until the camera has a reading
     eyes: Gauge
     response: Gauge
     blood: Gauge
-    hint: str = ""                    # why breathing cannot be measured, when it cannot
+    hint: str = ""                    # breathing or pulse being measured
     notes: tuple[Line, ...] = ()      # what happened: fall, blood spreading, a change, ...
-    pulse: Gauge = Gauge(PULSE, UNKNOWN, "unknown")
+    pulse: Gauge | None = None        # None until the camera has an estimate
 
     @property
-    def gauges(self) -> tuple[Gauge, Gauge, Gauge, Gauge, Gauge]:
-        return self.breathing, self.pulse, self.eyes, self.response, self.blood
+    def gauges(self) -> tuple[Gauge, ...]:
+        return tuple(g for g in (self.breathing, self.pulse, self.eyes, self.response, self.blood) if g is not None)
 
     @property
     def lines(self) -> tuple[Line, ...]:
@@ -223,23 +224,17 @@ def card_for(signs: dict, context: dict | None = None) -> Card:
         move = Line("CAMERA MOVING" if moving_camera(movement) else UNKNOWN, "unknown")
 
     breathing = signs.get("breathing", {"value": "not_testable"})
-    hint = ""
+    breath = None
     if breathing["value"] == "motion_detected":
         breath = Gauge("BREATHING", _marked(f"{breathing['rate_bpm']:.0f}", breathing), unit="/min")
     elif breathing["value"] == "no_motion_detected":
         breath = Gauge("BREATHING", _marked("NO MOTION", breathing), "attention")
-    elif moving_camera(breathing):
-        breath, hint = Gauge("BREATHING", UNKNOWN, "unknown"), "Hold the camera still to measure breathing"
-    elif movement["value"] != "still":
-        breath, hint = Gauge("BREATHING", UNKNOWN, "unknown"), "Breathing is measured while the person is still"
-    elif "breathing_remaining_s" not in context:
-        breath, hint = Gauge("BREATHING", UNKNOWN, "unknown"), "Chest not visible"
-    elif context["breathing_remaining_s"] > 0:
-        needed = max(context.get("breathing_needed_s", 9.0), 1e-6)
-        breath = Gauge("BREATHING", f"{context['breathing_remaining_s']:.0f} s", "active",
-                       progress=min(1.0, max(0.0, 1 - context["breathing_remaining_s"] / needed)))
-    else:
-        breath, hint = Gauge("BREATHING", UNKNOWN, "unknown"), "No clear breathing rhythm"
+    pulse = _pulse(signs)
+    measuring = [name for name, busy in (
+        ("breathing", breath is None and movement["value"] == "still"
+         and context.get("breathing_remaining_s", 0) > 0),
+        ("pulse", pulse is None and signs.get("pulse", {}).get("reason") == "measuring")) if busy]
+    hint = f"Measuring {' and '.join(measuring)}, keep still" if measuring else ""
 
     eyes = signs.get("eyes", {"value": "not_testable"})
     if eyes["value"] == "closed":
@@ -272,19 +267,14 @@ def card_for(signs: dict, context: dict | None = None) -> Card:
         bleed = Gauge("BLOOD", _marked("NOT SEEN", blood))
     else:
         bleed = Gauge("BLOOD", UNKNOWN, "unknown")
-    return Card(move, breath, eye, respond, bleed, hint, _notes(signs, context), _pulse(signs, context))
+    return Card(move, breath, eye, respond, bleed, hint, _notes(signs, context), pulse)
 
 
-def _pulse(signs: dict, context: dict) -> Gauge:
+def _pulse(signs: dict) -> Gauge | None:
     pulse = signs.get("pulse", {"value": "not_testable"})
     if pulse["value"] == "estimated":
         return Gauge(PULSE, _marked(f"{pulse['rate_bpm']:.0f}", pulse), unit="/min")
-    needed = context.get("pulse_needed_s")
-    if pulse.get("reason") == "measuring" and needed:
-        measured = context.get("pulse_measured_s", 0.0)
-        return Gauge(PULSE, f"{max(0.0, needed - measured):.0f} s", "active",
-                     progress=min(1.0, max(0.0, measured / needed)))
-    return Gauge(PULSE, UNKNOWN, "unknown")
+    return None
 
 
 def _ago(seconds: float) -> str:
@@ -589,8 +579,10 @@ def _box(callout: Callout, scale: float) -> tuple[np.ndarray, np.ndarray]:
               max_width=140, anchor="rm")
         draw.line(((left * k, (top + 37) * k), ((width - 12) * k, (top + 37) * k)), fill=(255, 255, 255, 34),
                   width=max(1, round(k)))
-        for index, gauge in enumerate(card.gauges):
-            _gauge(draw, EDGE_W + 6 + index * GAUGE_W, top + 40, gauge, k)
+        gauges = card.gauges
+        start = EDGE_W + 6 + (5 - len(gauges)) * GAUGE_W / 2
+        for index, gauge in enumerate(gauges):
+            _gauge(draw, start + index * GAUGE_W, top + 40, gauge, k)
         for index, line in enumerate(card.lines):
             _text(draw, (width + EDGE_W) / 2, top + BOX_H + 4 + index * HINT_H, line.text, "label", 12,
                   STATE_COLORS[line.state], k, max_width=width - 28, anchor="mm")

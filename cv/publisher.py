@@ -18,7 +18,7 @@ Behaviour:
   reports; a change of a sign's value counts as a change. ``send_history``
   (on by default) also sends the history and position signs (``HISTORY_SIGNS``),
   accepted since backend PR #12. ``DISPLAY_ONLY_SIGNS`` (the pulse estimate)
-  are never sent.
+  are never sent, and breathing is left out while it is ``not_testable``.
 - Occluded/lost reports repeat the position, confidence and ``last_seen_at`` of
   the last report the backend *accepted* for that track, as the contract
   requires. Tracks the backend never accepted get no occluded/lost report.
@@ -196,6 +196,8 @@ class Publisher:
 
     def _wire_signs(self, signs: dict) -> dict:
         dropped = DISPLAY_ONLY_SIGNS if self.settings.send_history else HISTORY_SIGNS + DISPLAY_ONLY_SIGNS
+        if signs.get("breathing", {}).get("value") == "not_testable":
+            dropped = (*dropped, "breathing")     # optional in the contract: no reading, nothing to show
         return {name: sign for name, sign in signs.items() if name not in dropped}
 
     def _signs_key(self, report: TrackReport) -> tuple:

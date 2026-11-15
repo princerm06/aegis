@@ -339,18 +339,19 @@ switches to the debug view with FPS, track states and publisher counters):
   that color (never amber or cyan), so it is clear which card is whose. Top
   line: number (same as the dashboard), posture, and how long they have been
   still.
-- **Four gauges in fixed places**, each with a fixed icon and label and one
-  short value: **breathing** (`16 /min`, or `NO MOTION` when no chest motion
-  is seen), **eyes** (`OPEN` / `CLOSED`), **response** to a spoken command
-  (`YES` / `NO`, `NOT ASKED` before the first command), **blood** (`NOT SEEN`
-  or the region, `HEAD +1`; the region is also outlined in amber on the body).
+- **Round gauges**, each with a fixed icon and label and one short value:
+  **eyes** (`OPEN` / `CLOSED`), **response** to a spoken command (`YES` /
+  `NO`, `NOT ASKED` before the first command), **blood** (`NOT SEEN` or the
+  region, `HEAD +1`; the region is also outlined in amber on the body).
+  **Breathing** (`16 /min`, or `NO MOTION` when no chest motion is seen) and
+  **pulse** (`72 /min`) only appear once the camera has a reading; there is
+  never a dash for them. While either is being measured one grey line says
+  "Measuring breathing and pulse, keep still".
 - **The ring is the state:** white = observed; amber = notable observation
   (no chest motion, eyes closed, no response, blood seen); dashed grey = the
   camera cannot tell (a dash) or nothing was asked yet; cyan = in progress
-  (the breathing ring fills while it measures, the response ring drains while
-  it watches after a command). A trailing `?` marks a low confidence. When
-  breathing cannot be measured, one grey line says why ("Hold the camera
-  still to measure breathing", "Chest not visible").
+  (the response ring drains while it watches after a command). A trailing
+  `?` marks a low confidence.
 - **What happened, under the gauges:** up to two short notes from the history
   observations below, most important first: "Fall seen 1:20 ago", "Face down
   for 0:12", "Waving now", "Blood area growing, +45% in 30 s", "Eyes closed
@@ -672,7 +673,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-207 tests. The suite covers:
+208 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.

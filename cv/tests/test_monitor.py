@@ -37,32 +37,38 @@ def values(card):
 
 def test_findings_are_amber_and_each_gauge_has_one_short_value():
     card = card_for(FINDINGS)
-    assert values(card) == ["STILL 1:35", "NO MOTION?", UNKNOWN_VALUE, "CLOSED", "NO", "TORSO +1"]   # 0.45 gets "?"
-    assert [g.label for g in card.gauges] == ["BREATHING", "PULSE EST.", "EYES", "RESPONSE", "BLOOD"]
-    assert {g.state for g in card.gauges if g is not card.pulse} == {"attention"}
-    assert card.pulse.state == "unknown" and card.movement.state == "observed"
+    assert values(card) == ["STILL 1:35", "NO MOTION?", "CLOSED", "NO", "TORSO +1"]   # 0.45 gets "?"
+    assert [g.label for g in card.gauges] == ["BREATHING", "EYES", "RESPONSE", "BLOOD"]   # no pulse estimate
+    assert {g.state for g in card.gauges} == {"attention"}
+    assert card.pulse is None and card.movement.state == "observed"
     assert card.eyes.icon == "closed" and card.blood.icon == "filled" and card.hint == ""
 
 
-def test_untestable_signs_show_a_dash_and_one_line_says_why():
+def test_breathing_and_pulse_only_appear_with_a_reading():
     card = card_for(UNKNOWN)
-    assert values(card) == ["CAMERA MOVING"] + [UNKNOWN_VALUE] * 5
-    assert {g.state for g in card.gauges} == {"unknown"}
-    assert card.hint == "Hold the camera still to measure breathing"
+    assert values(card) == ["CAMERA MOVING"] + [UNKNOWN_VALUE] * 3
+    assert [g.label for g in card.gauges] == ["EYES", "RESPONSE", "BLOOD"]
+    assert {g.state for g in card.gauges} == {"unknown"} and card.hint == ""
     still = {**UNKNOWN, "movement": {"value": "still", "confidence": 0.9, "still_for_s": 3.0},
              "response": {"value": "not_tested", "confidence": 0.0},
              "breathing": {"value": "not_testable", "confidence": 0.0}}
-    assert card_for(still).hint == "Chest not visible" and card_for(still).movement.text == "STILL 3 s"
+    assert card_for(still).breathing is None and card_for(still).hint == ""      # chest not visible
+    assert card_for(still).movement.text == "STILL 3 s"
     assert (card_for(still).response.value, card_for(still).response.state) == ("NOT ASKED", "unknown")
     asked = {**still, "response": {"value": "not_tested", "confidence": 0.0, "command_at": "2026-11-14T12:00:00Z"}}
     assert card_for(asked).response.value == UNKNOWN_VALUE        # asked, but the person was not seen enough
     measuring = card_for(still, {"breathing_remaining_s": 6.2, "breathing_needed_s": 9.0})
-    assert measuring.breathing.value == "6 s" and measuring.breathing.state == "active"
-    assert measuring.breathing.progress == pytest.approx(0.31, abs=0.01) and measuring.hint == ""
-    assert card_for(still, {"breathing_remaining_s": 0.0}).hint == "No clear breathing rhythm"
+    assert measuring.breathing is None and measuring.hint == "Measuring breathing, keep still"
+    both = card_for({**still, "pulse": {"value": "not_testable", "confidence": 0.0, "reason": "measuring"}},
+                    {"breathing_remaining_s": 6.2})
+    assert both.pulse is None and both.hint == "Measuring breathing and pulse, keep still"
+    assert card_for(still, {"breathing_remaining_s": 0.0}).hint == ""          # no clear rhythm: nothing shown
     moving = {**still, "movement": {"value": "moving", "confidence": 0.7, "still_for_s": 0.0}}
-    assert card_for(moving).hint == "Breathing is measured while the person is still"
+    assert card_for(moving, {"breathing_remaining_s": 6.2}).hint == ""
     assert card_for(moving).movement.text == "MOVING"
+    estimated = card_for({**still, "pulse": {"value": "estimated", "confidence": 0.7, "rate_bpm": 72.4}})
+    assert [g.label for g in estimated.gauges] == ["PULSE EST.", "EYES", "RESPONSE", "BLOOD"]
+    assert (estimated.pulse.value, estimated.pulse.unit) == ("72", "/min")
 
 
 def test_breathing_rate_and_listening_countdown():
@@ -103,7 +109,7 @@ def test_what_happened_shows_under_the_gauges_most_important_first():
     assert {line.state for line in card.lines} == {"attention"}          # the breathing hint gives way
     assert callout(1, {**UNKNOWN, **HISTORY}, context=context).size == (BOX_W, BOX_H + 2 * HINT_H)
     quiet = card_for({**UNKNOWN, "fall": {"value": "not_seen", "confidence": 0.5}, "changes": []})
-    assert [line.text for line in quiet.lines] == ["Hold the camera still to measure breathing"]
+    assert quiet.lines == ()
 
 
 def test_no_clinical_words_and_ascii_only():
@@ -242,7 +248,9 @@ def test_people_who_left_are_listed_with_room_and_time_even_after_the_tracker_fo
 
 def test_a_card_grows_by_one_line_only_when_it_has_something_to_explain():
     assert callout(1, FINDINGS).size == (BOX_W, BOX_H)
-    assert callout(1, UNKNOWN).size == (BOX_W, BOX_H + HINT_H)
+    assert callout(1, UNKNOWN).size == (BOX_W, BOX_H)
+    measuring = {**UNKNOWN, "movement": {"value": "still", "confidence": 0.9, "still_for_s": 3.0}}
+    assert callout(1, measuring, context={"breathing_remaining_s": 5.0}).size == (BOX_W, BOX_H + HINT_H)
     assert callout(1, UNKNOWN, in_view=False).size == (CHIP_W, CHIP_H)     # no empty card for someone unseen
 
 
