@@ -218,14 +218,23 @@ cam, each sending signs to the backend and serving its own dashboard tile:
 ```sh
 python -m cv.demo                  # both cameras, everyone reported in room-2
 python -m cv.demo --room room-1    # another room; --no-bodycam for the C922 only
+python -m cv.demo --bodycam-view-only   # body cam draws and streams, sends nothing
+python -m cv.demo --backend-url http://192.168.137.1:8000 --stream-host 0.0.0.0
+                                   # shared backend; tiles viewable from other laptops
 ```
 
 It prints the link for each tile: **BUILDING CAM** `http://127.0.0.1:8090/stream.mjpg`
-and **ALPHA · BODYCAM** `http://127.0.0.1:8091/stream.mjpg`. Paste them once in
-the tile's source field; the browser remembers them. Ctrl+C stops both cameras.
-Checked live on Nov 14: both tiles showed their camera and both cameras'
-detections reached the backend. A person seen by both cameras shows as two
-detections; link the fixed camera's one, since a casualty takes one track.
+and **ALPHA · BODYCAM** `http://127.0.0.1:8091/stream.mjpg` (with `--stream-host
+0.0.0.0`, this laptop's network address instead, for a dashboard on another
+laptop). Paste them once in the tile's source field; the browser remembers them.
+Ctrl+C stops both cameras. Checked live on Nov 14: both tiles showed their camera
+and both cameras' detections reached the backend.
+
+The fixed camera is the one the operator links to casualties: a casualty takes
+one track, so a person seen by both cameras would show as two detections.
+`--bodycam-view-only` keeps the body cam as the responder's live view (its
+cards still show eyes, blood and posture up close) without a second marker on
+the map.
 
 The rest of this section is what `cv.demo` runs for the fixed camera.
 
@@ -699,7 +708,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-212 tests. The suite covers:
+213 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.

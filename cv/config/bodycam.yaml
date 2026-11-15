@@ -40,3 +40,4 @@ signs:
 
 publisher:
   camera_id: bodycam-1
+  timeout_s: 8.0                 # the venue hotspot answers in 2-5 s, see demo.yaml
