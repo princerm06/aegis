@@ -5,6 +5,7 @@ import { SEVERITY_META, clock, meters, responderName, shortId } from "@/lib/form
 import { assessMediaSupport, friendlyMediaError, mediaBlockerCopy, readMediaEnvironment, type MediaBlockerKind } from "@/lib/mediaCapabilities";
 import { directHint, routeToSteps } from "@/lib/navigation";
 import type { AStarRoute, ResponderStatus, SimulationProposal, SimulationState } from "@/lib/types";
+import { PhoneCall } from "./PhoneCall";
 import { Badge } from "./ui";
 
 interface Props {
@@ -110,6 +111,7 @@ export function CommsPanel({ state, proposal, fighterId, onStatus, placing, onPl
           </button>
         </div>
 
+        <PhoneCall responderId={f.id} name={name} onLog={addLog} />
         <PushToTalk name={name} onLog={addLog} />
 
         {/* quick commands */}
