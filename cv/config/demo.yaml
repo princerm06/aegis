@@ -40,6 +40,9 @@ tracking:
 
 signs:
   enabled: true
+  # The responder's loud "Can you hear me?" into the phone on their chest starts
+  # the response check (cv/voice_cue.py); without the phone, press c.
+  voice_cue_mic: iPhone
   # Seen from above, open eyelids look half closed: in the high-camera demo-two
   # take open eyes scored about 0.45 and closed eyes about 0.75 (0.4 is tuned on
   # frontal faces, where closed eyes score 0.7-0.9).
