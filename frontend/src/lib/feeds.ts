@@ -15,6 +15,17 @@ export interface Feed {
 
 export const MAP_FEED_ID = "map";
 
+/**
+ * The live view the BUILDING CAM tile shows without setup: the first registered
+ * camera serving one that is not a body cam. Only plain http(s) URLs are used.
+ */
+export function buildingStreamUrl(cameras: { camera_id: string; stream_url?: string | null }[]): string | null {
+  const camera = cameras.find(
+    (c) => !!c.stream_url && /^https?:\/\//i.test(c.stream_url) && !/body/i.test(c.camera_id),
+  );
+  return camera?.stream_url ?? null;
+}
+
 /** True swap: the selected secondary feed takes the primary slot, the old primary takes the selected feed's slot. */
 export function swapOrder(order: string[], selectedId: string): string[] {
   const i = order.indexOf(selectedId);
