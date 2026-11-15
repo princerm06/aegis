@@ -4,6 +4,7 @@ import threading
 import time
 import urllib.request
 
+import cv2
 import numpy as np
 
 from cv.stream import BOUNDARY, FrameStream
@@ -47,3 +48,10 @@ def test_frames_and_the_stream_are_served_only_while_watched_and_commands_are_co
     finally:
         stop.set()
         stream.stop()
+
+
+def test_a_max_width_shrinks_streamed_frames():
+    stream = FrameStream(port=0, max_width=640)
+    stream._clients = 1
+    stream.publish(np.zeros((720, 1280, 3), np.uint8), now=10.0)
+    assert cv2.imdecode(np.frombuffer(stream._jpeg, np.uint8), cv2.IMREAD_COLOR).shape == (360, 640, 3)

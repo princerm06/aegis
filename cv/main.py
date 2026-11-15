@@ -61,6 +61,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="serve the view as MJPEG on this port for the dashboard tile, e.g. 8090 (0 = off)")
     parser.add_argument("--stream-host", default="127.0.0.1",
                         help="stream address; 0.0.0.0 exposes the video to the network")
+    parser.add_argument("--stream-fps", type=float, default=12.0, help="stream frames per second")
+    parser.add_argument("--stream-quality", type=int, default=80, help="stream JPEG quality, 1-100")
+    parser.add_argument("--stream-width", type=int, default=0, help="shrink stream frames to this width (0 = full)")
     parser.add_argument("--duration", type=float, default=0.0, help="stop after N seconds (0 = run)")
     parser.add_argument("--summary-json", help="also write the measured run summary to this file")
     parser.add_argument("--room", help="mapping.zone_select keys: starting room (default: the first zone)")
@@ -239,7 +242,8 @@ def run(args: argparse.Namespace) -> int:
     if args.stream_port:
         from cv.stream import FrameStream
 
-        stream = FrameStream(args.stream_host, args.stream_port)
+        stream = FrameStream(args.stream_host, args.stream_port, args.stream_fps, args.stream_quality,
+                             args.stream_width)
         stream.start()
 
     def mark_command(now: float, source: str) -> None:

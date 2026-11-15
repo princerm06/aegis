@@ -26,10 +26,12 @@ PAGE = (b"<!doctype html><title>AEGIS CV</title><body style='margin:0;background
 
 
 class FrameStream:
-    def __init__(self, host: str = "127.0.0.1", port: int = 8090, fps: float = 12.0, quality: int = 80):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8090, fps: float = 12.0, quality: int = 80,
+                 max_width: int = 0):
         self.host, self.port = host, port
         self.period = 1.0 / max(1.0, fps)
         self.quality = quality
+        self.max_width = max_width          # 0: full size
         self._jpeg: bytes | None = None
         self._frame_id = 0
         self._ready = threading.Condition()
@@ -126,6 +128,9 @@ class FrameStream:
         now = time.monotonic() if now is None else now
         if not self.watched or now - self._last_encode < self.period:
             return
+        if self.max_width and canvas.shape[1] > self.max_width:
+            height = round(canvas.shape[0] * self.max_width / canvas.shape[1])
+            canvas = cv2.resize(canvas, (self.max_width, height), interpolation=cv2.INTER_AREA)
         ok, buffer = cv2.imencode(".jpg", canvas, [cv2.IMWRITE_JPEG_QUALITY, self.quality])
         if not ok:
             return

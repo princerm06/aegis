@@ -55,7 +55,7 @@ def test_the_phone_microphone_matches_by_model():
     assert find_microphone("iPhone", microphones[:1], inputs[1:]) is None
 
 
-def test_demo_cameras_listen_to_the_phone():
-    for config in ("demo.yaml", "bodycam.yaml"):
-        assert load_settings(CONFIG_DIR / config).signs.voice_cue_mic == "iPhone"
+def test_the_fixed_camera_listens_on_its_own_mic_and_the_body_cam_on_the_phone():
+    assert load_settings(CONFIG_DIR / "demo.yaml").signs.voice_cue_mic == "C922"
+    assert load_settings(CONFIG_DIR / "bodycam.yaml").signs.voice_cue_mic == "iPhone"
     assert SignsSettings().voice_cue_mic == ""

@@ -45,6 +45,8 @@ class Feed:
         return f"http://{host}:{self.port}/stream.mjpg"
 
 
+LAN_STREAM = ["--stream-fps", "5", "--stream-quality", "60", "--stream-width", "640"]   # fits a hotspot
+
 FIXED = Feed("Fixed camera", "demo.yaml", 8090, "BUILDING CAM")
 BODYCAM = Feed("Body cam", "bodycam.yaml", 8091, "ALPHA · BODYCAM")
 
@@ -65,6 +67,8 @@ def command(feed: Feed, room: str, display: bool, backend_url: str | None = None
             stream_host: str = "127.0.0.1", view_only: bool = False) -> list[str]:
     argv = [sys.executable, "-m", "cv.main", "--config", str(CONFIG_DIR / feed.config),
             "--room", room, "--send-signs", "--stream-port", str(feed.port), "--stream-host", stream_host]
+    if stream_host != "127.0.0.1":
+        argv += LAN_STREAM
     if backend_url:
         argv += ["--backend-url", backend_url]
     if view_only:
