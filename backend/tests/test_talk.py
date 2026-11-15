@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from backend.app.api.talk import MAX_CHANNELS, MAX_SDP, TalkRelay
+from backend.app.api.talk import MAX_CHANNELS, MAX_SDP, TalkRelay, ice_config
 from backend.app.main import create_app
 
 BASE = "/api/v1/simulations/talk/channels"
@@ -70,6 +70,26 @@ def test_bad_input_is_rejected():
     for n in range(MAX_CHANNELS):
         client.post(f"{BASE}/r-{n}/heartbeat")
     assert client.post(f"{BASE}/one-too-many/heartbeat").status_code == 429
+
+
+def test_ice_servers_default_to_stun_and_add_a_turn_relay_when_configured(tmp_path):
+    none = tmp_path / "missing.env"
+    assert ice_config({}, env_file=none).model_dump() == {
+        "ice_servers": [{"urls": ["stun:stun.l.google.com:19302"], "username": None, "credential": None}],
+        "ice_transport_policy": "all",
+    }
+    env_file = tmp_path / ".env"
+    env_file.write_text("AEGIS_TALK_TURN_URLS=turn:100.64.0.5:3478, http://not-turn\n"
+                        "AEGIS_TALK_TURN_USERNAME=aegis\nAEGIS_TALK_TURN_CREDENTIAL='s3cret'\n", encoding="utf-8")
+    relay = ice_config({"AEGIS_TALK_FORCE_RELAY": "1"}, env_file=env_file)
+    assert relay.ice_servers[1].model_dump() == {"urls": ["turn:100.64.0.5:3478"], "username": "aegis", "credential": "s3cret"}
+    assert relay.ice_transport_policy == "relay"
+    assert ice_config({"AEGIS_TALK_FORCE_RELAY": "1"}, env_file=none).ice_transport_policy == "all"   # no relay to force
+
+    client, _ = api()
+    client.app.state.talk_ice = relay
+    response = client.get("/api/v1/simulations/talk/ice-servers")
+    assert response.json()["ice_transport_policy"] == "relay" and response.headers["cache-control"] == "no-store"
 
 
 def test_talk_link_leaves_the_simulation_untouched():

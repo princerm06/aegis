@@ -27,6 +27,29 @@ recording, no simulation state, no keys or accounts.
 
 Stale or ended calls return 409; at most 16 channels.
 
+`GET /api/v1/simulations/talk/ice-servers` tells both browsers how to find a network
+path: STUN by default. When the operator's laptop and the phone can't reach each other
+directly (for example both only on Tailscale), add a TURN relay that both can reach.
+For example, coturn on a team Mac on the tailnet (`brew install coturn`):
+
+```
+turnserver -n --listening-ip <mac-tailscale-ip> --relay-ip <mac-tailscale-ip> --listening-port 3478 \
+  --lt-cred-mech --user aegis:<password> --realm aegis --no-tls --fingerprint --no-cli
+```
+
+Then, in the backend host's git-ignored `backend/.env` (environment variables override
+the file), restart the backend:
+
+```
+AEGIS_TALK_TURN_URLS=turn:<mac-tailscale-ip>:3478
+AEGIS_TALK_TURN_USERNAME=aegis
+AEGIS_TALK_TURN_CREDENTIAL=<password>
+AEGIS_TALK_FORCE_RELAY=1   # optional: always use the relay
+```
+
+The TURN password is handed to every browser that loads the dashboard, so use a
+throwaway one and keep the relay on the tailnet.
+
 Optional historical NYC EMS dispatch-duration research is documented in
 `../ml/ems/README.md`. Its read-only simulation advisory defaults to disabled
 and cannot alter coordination, approval, dispatch, clinical or hardware state.
