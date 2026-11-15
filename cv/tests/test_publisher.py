@@ -178,6 +178,30 @@ def test_conflicting_registration_is_reported_but_not_fatal():
     assert publisher.stats.accepted == 1
 
 
+def test_an_announced_stream_registers_at_once_with_its_address():
+    publisher, transport, _ = make()
+    publisher.step()
+    assert transport.calls == []                                       # nothing to say yet
+    publisher.announce_stream("http://192.168.137.145:8090/stream.mjpg")
+    publisher.step()                                                   # no one in view: registers anyway
+    ((method, _, body),) = transport.calls
+    assert method == "PUT" and body["stream_url"] == "http://192.168.137.145:8090/stream.mjpg"
+    publisher.step()
+    assert len(transport.calls) == 1
+
+
+def test_a_backend_without_stream_url_still_registers_the_camera():
+    publisher, transport, _ = make()
+    publisher.announce_stream("http://10.0.0.5:8090/stream.mjpg")
+    transport.script = [(422, {"detail": [{"type": "extra_forbidden", "loc": ["body", "stream_url"]}]})]
+    publisher.step()
+    (_, _, first), (_, _, second) = transport.calls
+    assert "stream_url" in first and "stream_url" not in second
+    publisher.submit([report(100.0)])
+    publisher.step()
+    assert [m for m, _, _ in transport.calls] == ["PUT", "PUT", "POST"]   # registered once, then posting
+
+
 def test_lost_report_is_always_sent_and_clears_state():
     publisher, transport, clock = make()
     publisher.submit([report(100.0)])

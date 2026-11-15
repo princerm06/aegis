@@ -275,6 +275,17 @@ by default because the frames show people; `--stream-host 0.0.0.0` exposes it to
 the network. Measured on a replayed clip: about 9 frames per second to one
 viewer, and the command reached the pipeline.
 
+**The dashboard finds the view by itself.** With a stream and a backend, the
+camera registers at start (before anyone is seen) with `stream_url`: this
+laptop's address on the backend's network for `--stream-host 0.0.0.0`, the
+loopback address otherwise, or `--stream-url` (e.g. an HTTPS Tailscale name).
+The BUILDING CAM tile shows the first non-body camera's `stream_url` unless that
+browser picked a source by hand. A backend from before `stream_url` answers 422;
+the camera then registers without it as before (paste the link by hand).
+Checked end to end on Nov 15: the tile went live with nothing pasted, showed
+"waiting for camera" when the camera stopped, and came back on its own when it
+restarted.
+
 **Who needs help first, on the video** (`cv/assignments.py`): when publishing
 to a real backend, the pipeline reads `GET /state` every second. Once the
 operator has linked a person's track to a casualty and set a priority, a band
@@ -730,7 +741,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-224 tests. The suite covers:
+227 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.

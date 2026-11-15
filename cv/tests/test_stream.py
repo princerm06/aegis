@@ -55,3 +55,11 @@ def test_a_max_width_shrinks_streamed_frames():
     stream._clients = 1
     stream.publish(np.zeros((720, 1280, 3), np.uint8), now=10.0)
     assert cv2.imdecode(np.frombuffer(stream._jpeg, np.uint8), cv2.IMREAD_COLOR).shape == (360, 640, 3)
+
+
+def test_the_announced_address_is_one_other_laptops_can_reach():
+    from cv.stream import public_url
+    local, shared = FrameStream("127.0.0.1", 8090), FrameStream("0.0.0.0", 8091)
+    assert public_url(local, None) == "http://127.0.0.1:8090/stream.mjpg"
+    address = public_url(shared, "http://192.168.137.1:8000")
+    assert address.endswith(":8091/stream.mjpg") and "0.0.0.0" not in address

@@ -64,6 +64,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stream-fps", type=float, default=12.0, help="stream frames per second")
     parser.add_argument("--stream-quality", type=int, default=80, help="stream JPEG quality, 1-100")
     parser.add_argument("--stream-width", type=int, default=0, help="shrink stream frames to this width (0 = full)")
+    parser.add_argument("--stream-url",
+                        help="address dashboards should use for the view (e.g. an HTTPS Tailscale name); "
+                             "default: this laptop's address for --stream-host")
     parser.add_argument("--duration", type=float, default=0.0, help="stop after N seconds (0 = run)")
     parser.add_argument("--summary-json", help="also write the measured run summary to this file")
     parser.add_argument("--room", help="mapping.zone_select keys: starting room (default: the first zone)")
@@ -240,11 +243,13 @@ def run(args: argparse.Namespace) -> int:
         cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
     stream = None
     if args.stream_port:
-        from cv.stream import FrameStream
+        from cv.stream import FrameStream, public_url
 
         stream = FrameStream(args.stream_host, args.stream_port, args.stream_fps, args.stream_quality,
                              args.stream_width)
         stream.start()
+        if publisher is not None:
+            publisher.announce_stream(args.stream_url or public_url(stream, settings.publisher.base_url))
 
     def mark_command(now: float, source: str) -> None:
         if signs is None:

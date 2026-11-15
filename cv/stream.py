@@ -17,14 +17,35 @@ import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
 
 import cv2
 
 log = logging.getLogger("cv.stream")
+LOOPBACK = ("127.0.0.1", "localhost")
 BOUNDARY = "aegisframe"
 REMOTE_SEND_BUFFER = 24 * 1024
 PAGE = (b"<!doctype html><title>AEGIS CV</title><body style='margin:0;background:#111'>"
         b"<img src='/stream.mjpg' style='width:100%'></body>")
+
+
+def lan_address(backend_url: str | None) -> str:
+    """This laptop's address on the network the backend is on, for viewers on other laptops."""
+    target = urlparse(backend_url).hostname if backend_url else None
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect((target or "192.168.0.1", 80))      # UDP: picks the route, sends nothing
+            return probe.getsockname()[0]
+    except OSError:
+        return socket.gethostname()
+
+
+def public_url(stream: "FrameStream", backend_url: str | None) -> str:
+    """The view's address as other machines reach it: loopback stays loopback."""
+    if stream.host in LOOPBACK:
+        return stream.url
+    host = stream.host if stream.host not in ("0.0.0.0", "") else lan_address(backend_url)
+    return f"http://{host}:{stream.port}/stream.mjpg"
 
 
 class FrameStream:

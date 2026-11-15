@@ -6,8 +6,6 @@
     python -m cv.demo --bodycam-view-only   # body cam as a live view only, nothing sent from it
     python -m cv.demo --backend-url http://192.168.137.1:8000 --stream-host 0.0.0.0
                                        # shared backend; tiles viewable from other laptops
-    python -m cv.demo --backend-url http://<host's 100.x>:8000 --stream-host <this Mac's 100.x>
-                                       # over Tailscale: tiles only for the team's devices
     python -m cv.demo --no-display     # no windows on the laptop, dashboard tiles only
 
 Each camera runs as its own ``cv.main`` process (``cv/config/demo.yaml`` and
@@ -24,16 +22,15 @@ from __future__ import annotations
 
 import argparse
 import signal
-import socket
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from typing import Sequence
-from urllib.parse import urlparse
 
 from cv.camera import describe_cameras, find_camera, list_cameras
 from cv.settings import CONFIG_DIR, CV_DIR, load_settings
+from cv.stream import lan_address
 
 
 @dataclass(frozen=True)
@@ -79,17 +76,6 @@ def command(feed: Feed, room: str, display: bool, backend_url: str | None = None
     return argv if display else [*argv, "--no-display"]
 
 
-def lan_address(backend_url: str | None) -> str:
-    """This laptop's address on the network the backend is on, for tile links on other laptops."""
-    target = urlparse(backend_url).hostname if backend_url else None
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
-            probe.connect((target or "192.168.0.1", 80))      # UDP: picks the route, sends nothing
-            return probe.getsockname()[0]
-    except OSError:
-        return socket.gethostname()
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--room", default="room-2", help="room everyone is reported in (default: room-2)")
@@ -113,7 +99,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         command(feed, args.room, not args.no_display, args.backend_url, args.stream_host,
                 view_only=args.bodycam_view_only and feed is BODYCAM), cwd=CV_DIR.parent))
         for feed in feeds]
-    host = lan_address(args.backend_url) if args.stream_host == "0.0.0.0" else args.stream_host
+    host = "127.0.0.1" if args.stream_host == "127.0.0.1" else lan_address(args.backend_url)
     print(f"\nPeople are reported in {args.room} to {args.backend_url or 'the configs backend'}."
           " Dashboard tiles (paste once, the browser remembers):")
     for feed in feeds:
