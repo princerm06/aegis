@@ -1,0 +1,24 @@
+[project]
+name = "neural-assignment-experiment"
+version = "0.1.0"
+description = "Isolated supervised neural assignment intelligence experiment (advisory simulation only, no dispatch)"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.2",
+    "numpy>=1.26,<3",
+    "ortools>=9.14,<10",
+    "pydantic>=2.10,<3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<10",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"

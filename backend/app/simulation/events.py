@@ -30,6 +30,8 @@ EVENT_TYPES = frozenset({
     "simulation.device_completed",
     "simulation.responder_released",
     "simulation.intelligence_policy_updated",
+    "simulation.route_invalidated",
+    "simulation.route_revalidated",
 })
 
 

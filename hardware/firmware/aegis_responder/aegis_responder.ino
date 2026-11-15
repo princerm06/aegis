@@ -11,7 +11,9 @@
 //   device joins it and connects to BRIDGE_HOST:BRIDGE_PORT. It reconnects on
 //   its own after walking out of range.
 //
-// Wiring (Grove Base Shield): button -> D2, LED -> D4.
+// Wiring: Grove button -> D2 (via a Grove Base Shield, or a Grove-to-jumper
+// cable: yellow SIG -> D2, red VCC -> 5V, black GND -> GND).
+// Alerts use the on-board LED and the LED matrix; a Grove LED on D4 is optional.
 //
 // Line protocol (one ASCII line per message, '\n' terminated):
 //   Host -> device
@@ -39,11 +41,22 @@
 #define AEGIS_WIFI 0
 #endif
 
-const char *FW_VERSION = "0.2.0";
-const char *DEVICE_ID = "responder-device-01";
+// Several devices on one bridge laptop: build device N with
+//   --build-property "compiler.cpp.extra_flags=-DAEGIS_DEVICE_NUM=N"
+// Device N reports as "responder-device-0N" and connects to BRIDGE_PORT + N - 1,
+// so each device talks to its own bridge. The default is device 1.
+#ifndef AEGIS_DEVICE_NUM
+#define AEGIS_DEVICE_NUM 1
+#endif
+#define AEGIS_STR2(x) #x
+#define AEGIS_STR(x) AEGIS_STR2(x)
+
+const char *FW_VERSION = "0.2.2";
+const char *DEVICE_ID = "responder-device-0" AEGIS_STR(AEGIS_DEVICE_NUM);
 
 const int BUTTON_PIN = 2;
-const int LED_PIN = 4;
+const int LED_PIN = 4;                   // optional external Grove LED
+const int ONBOARD_LED = LED_BUILTIN;     // the board's own "L" LED, always present
 
 const unsigned long DEBOUNCE_MS = 30;
 const unsigned long LONG_PRESS_MS = 1500;
@@ -54,6 +67,9 @@ const unsigned long WIFI_RETRY_MS = 15000;  // between WiFi join attempts (the j
 const unsigned long WIFI_CHECK_MS = 500;    // how often to ask the WiFi chip for its status
 const unsigned long TCP_RETRY_MS = 2000;    // between bridge connection attempts
 const unsigned long HOST_SILENCE_MS = 8000; // bridge pings every 2 s; silence = dead link
+
+const unsigned long BANNER_STEP_MS = 70;    // scroll speed of the "AEGIS" banner
+const unsigned long TAP_WINDOW_MS = 600;    // three taps this close together = self-test
 
 const int CMD_MAX = 40;
 const int LABEL_MAX = 4;
@@ -86,6 +102,13 @@ bool longPressFired = false;
 
 bool ledOn = false;
 unsigned long ledToggledAt = 0;
+
+char bannerText[16] = "";
+bool bannerActive = false;
+int bannerX = 0;
+unsigned long bannerStepAt = 0;
+int tapCount = 0;
+unsigned long lastTapAt = 0;
 
 #if AEGIS_WIFI
 WiFiClient bridge;
@@ -141,6 +164,7 @@ void showText(const char *text) {
 }
 
 void showIdle() {
+  if (bannerActive) return;  // the banner returns here when it finishes
   if (!linkUp()) {
     showText("--");  // not connected to the bridge
     return;
@@ -149,6 +173,42 @@ void showIdle() {
   matrix.clear();
   matrix.point(11, 7);  // single "alive and linked" pixel
   matrix.endDraw();
+}
+
+// "AEGIS" scrolls across the matrix at power-on. Three quick taps while idle
+// scroll it again with the device number and link state ("AEGIS 1 OK" or
+// "AEGIS 1 --") as a self-test. It never blocks, only runs while idle, and a
+// new task cancels it at once. It sends nothing to the host.
+void startBanner(bool withStatus) {
+  if (withStatus) {
+    snprintf(bannerText, sizeof(bannerText), "AEGIS %d %s", AEGIS_DEVICE_NUM, linkUp() ? "OK" : "--");
+  } else {
+    strcpy(bannerText, "AEGIS");
+  }
+  bannerActive = true;
+  bannerX = 12;
+  bannerStepAt = 0;
+}
+
+void updateBanner() {
+  if (!bannerActive) return;
+  if (state != IDLE) { bannerActive = false; return; }
+  if (millis() - bannerStepAt < BANNER_STEP_MS) return;
+  bannerStepAt = millis();
+  if (bannerX < -4 * (int)strlen(bannerText)) {
+    bannerActive = false;
+    showIdle();
+    return;
+  }
+  matrix.beginDraw();
+  matrix.clear();
+  matrix.stroke(0xFFFFFFFF);
+  matrix.textFont(Font_4x6);
+  matrix.beginText(bannerX, 1, 0xFFFFFF);
+  matrix.print(bannerText);
+  matrix.endText();
+  matrix.endDraw();
+  bannerX--;
 }
 
 // ---------------------------------------------------------------- reports
@@ -169,13 +229,18 @@ void retryPendingReport() {
   if (pendingKind[0] != '\0' && millis() - pendingSentAt >= RETRY_MS) sendReport();
 }
 
+void setLed(bool on) {
+  ledOn = on;
+  digitalWrite(LED_PIN, on ? HIGH : LOW);
+  digitalWrite(ONBOARD_LED, on ? HIGH : LOW);
+}
+
 void clearAssignment() {
   state = IDLE;
   commandId[0] = '\0';
   label[0] = '\0';
   urgent = false;
-  digitalWrite(LED_PIN, LOW);
-  ledOn = false;
+  setLed(false);
   showIdle();
 }
 
@@ -300,7 +365,7 @@ void maintainWifi() {
   }
   if (!tcpUp && now - lastTcpAttempt >= TCP_RETRY_MS) {
     lastTcpAttempt = now;
-    if (bridge.connect(BRIDGE_HOST, BRIDGE_PORT)) {
+    if (bridge.connect(BRIDGE_HOST, BRIDGE_PORT + AEGIS_DEVICE_NUM - 1)) {
       tcpReader.len = 0;
       tcpReader.overflow = false;
       lastHostMessage = millis();
@@ -324,9 +389,17 @@ void readTcp() {
 void onShortPress() {
   if (state == ALERTING) {
     state = ACKED;
-    digitalWrite(LED_PIN, HIGH);
-    ledOn = true;
+    setLed(true);
+    showText(label);  // stop flashing: the label stays on while the responder is on the way
     queueReport("ACK");
+  } else if (state == IDLE) {
+    unsigned long now = millis();
+    tapCount = (now - lastTapAt <= TAP_WINDOW_MS) ? tapCount + 1 : 1;
+    lastTapAt = now;
+    if (tapCount >= 3) {
+      tapCount = 0;
+      startBanner(true);
+    }
   }
 }
 
@@ -365,13 +438,21 @@ void readButton() {
 
 // ---------------------------------------------------------------- LED
 
+// While a new task is waiting for acknowledgement, the LEDs blink and the
+// matrix label flashes with them, so the alert is visible with no external LED.
 void updateLed() {
   if (state != ALERTING) return;
   unsigned long period = urgent ? BLINK_FAST_MS : BLINK_SLOW_MS;
   if (millis() - ledToggledAt >= period) {
     ledToggledAt = millis();
-    ledOn = !ledOn;
-    digitalWrite(LED_PIN, ledOn ? HIGH : LOW);
+    setLed(!ledOn);
+    if (ledOn) {
+      showText(label);
+    } else {
+      matrix.beginDraw();
+      matrix.clear();
+      matrix.endDraw();
+    }
   }
 }
 
@@ -381,11 +462,13 @@ void setup() {
   Serial.begin(115200);
   pinMode(BUTTON_PIN, INPUT);
   pinMode(LED_PIN, OUTPUT);
+  pinMode(ONBOARD_LED, OUTPUT);
   matrix.begin();
 #if AEGIS_WIFI
   WiFi.setTimeout(0);  // make WiFi.begin() non-blocking (see maintainWifi)
 #endif
   clearAssignment();
+  startBanner(false);
 }
 
 void loop() {
@@ -396,5 +479,6 @@ void loop() {
 #endif
   readButton();
   updateLed();
+  updateBanner();
   retryPendingReport();
 }

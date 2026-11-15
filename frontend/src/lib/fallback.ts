@@ -27,6 +27,7 @@ export function fallbackState(): SimulationState {
     approvals: [],
     dispatches: [],
     assignments: [],
+    route_invalidations: [],
     last_recommendation: null,
   };
 }

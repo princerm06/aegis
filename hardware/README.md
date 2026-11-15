@@ -11,19 +11,50 @@ dispatches; pending, unapproved proposals are never shown.
 
 ## What the device does
 
-| Moment | LED (D4) | LED matrix | Responder does | Bridge reports |
+| Moment | LED matrix | On-board LED | Responder does | Bridge reports |
 | --- | --- | --- | --- | --- |
-| Idle | off | one corner dot | — | — |
-| Approved dispatch arrives | blinks (fast = `immediate` casualty) | casualty label, e.g. `A`, `C3` | — | `delivered` |
-| Responder accepts | solid | label | short press | `acknowledged` |
-| Responder finishes | off | `OK`, then idle | hold 1.5 s | `completed` |
+| Power-on | `AEGIS` scrolls once | off | — | — |
+| Idle | one corner dot (`--` = not connected) | off | — | — |
+| Self-test | `AEGIS 1 OK` scrolls (`--` instead of `OK` = not connected; the number is the device) | off | three quick taps while idle | nothing |
+| Approved dispatch arrives | casualty label **flashes**, e.g. `A`, `C3` (fast = `immediate`) | blinks | — | `delivered` |
+| Responder accepts | label steady | on | short press | `acknowledged` |
+| Responder finishes | `OK`, then idle | off | hold 1.5 s | `completed` |
+
+The device only uses the medic-confirmed priority for the fast flash, never a
+camera suggestion. Its LED matrix is red: keep it facing away from the camera,
+which detects fake blood by colour.
 
 If the backend resets, completes, or replaces the task, the device clears. The
 reports describe what the responder did, never the casualty's condition.
 
 ## Wiring
 
-Grove Base Shield on the UNO R4 WiFi: **button → D2**, **LED → D4**, USB to the laptop.
+Only a Grove button is needed. Do **not** use a Grove Base Shield: it covers the
+LED matrix. Connect the button with a **Grove-to-male-jumper** cable:
+
+| Wire | Button pin | Arduino pin |
+| --- | --- | --- |
+| yellow | SIG | **2** |
+| red | VCC | **5V** |
+| black | GND | **GND** |
+| white | NC | unused |
+
+Power comes from a USB power bank (USB-C). A Grove LED on pin 4 is optional;
+alerts use the on-board LED and the matrix. Never run the demo with nothing on
+pin 2: a floating input can read as phantom presses.
+
+## Enclosure
+
+`enclosure/aegis_case.scad` is a parametric OpenSCAD case with AEGIS branding, a
+window over the LED matrix (sized for both the UNO R4 WiFi and the UNO Q) and a
+pocket for the Grove button. Two bodies share the same lid design:
+
+- `part = "plate"`: straps onto the power bank (first device, Yoobao PDL20).
+- `part = "plate2"`: a cradle the power bank slides into (second device, Rivacase VA2612).
+
+Export with `openscad -D "part=\"plate\"" -o case.stl enclosure/aegis_case.scad`.
+Print in PLA, no supports, with a 5-8 mm brim. Measure your power bank and set
+`bank` / `bank2` first; STL files are not committed.
 
 ## Flash the firmware (once)
 
@@ -103,6 +134,28 @@ laptop's address on it and run `start-bridge.ps1 -Wifi -WifiListen <that-ip>:777
 The device port is unauthenticated, so the bridge only listens on the hotspot
 address, never on the campus network.
 
+## Two responders
+
+Each Arduino gets its own bridge on the same laptop. Device N reports as
+`responder-device-0N`, connects to port `7777 + N - 1`, and follows `responder-00N`.
+
+Flash the second board with its device number (the first board needs no flag):
+
+```powershell
+arduino-cli compile --upload --fqbn arduino:renesas_uno:unor4wifi -p <its COM port> `
+  --build-property "compiler.cpp.extra_flags=-DAEGIS_DEVICE_NUM=2" hardware/firmware/aegis_responder
+```
+
+Then run one bridge per device, each in its own terminal:
+
+```powershell
+.\hardware\scripts\start-bridge.ps1 -Wifi -Local              # device 1 -> responder-001, port 7777
+.\hardware\scripts\start-bridge.ps1 -Wifi -Local -Device 2    # device 2 -> responder-002, port 7778
+```
+
+Both boards join the same hotspot. The full `scripts.live_demo` rehearsal takes
+`responder-002` offline, so use `--prepare-only` when both devices should get tasks.
+
 ## On university WiFi: Tailscale
 
 Campus WiFi is crowded and usually blocks laptops from reaching each other.
@@ -135,6 +188,11 @@ restarts the bridge if it ever exits with an error):
 .\hardware\scripts\start-bridge.ps1 -Backend <name> -CheckOnly        # just run the checks
 .\hardware\scripts\start-bridge.ps1 -Local                            # backend on this laptop
 ```
+
+The backend listens on port 8000. If the team reaches it through the private
+proxy instead, that is port 8011: add `-BackendPort 8011` (the proxy must pass
+`/health` and `/api/v1/...` through unchanged). Device ports 7777-7780 are
+separate and never go through the proxy.
 
 If PowerShell refuses to run scripts, use
 `powershell -ExecutionPolicy Bypass -File hardware\scripts\start-bridge.ps1 ...`.

@@ -2,6 +2,7 @@
 
 import { useMemo, useRef } from "react";
 import { SEVERITY_META, ageSeconds, meters, shortId } from "@/lib/format";
+import { getInvalidatedAssignments, isRouteStale } from "@/lib/routeInvalidation";
 import type { AStarRoute, AssignmentStatus, SimulationProposal, SimulationState } from "@/lib/types";
 
 const STALE_S = 30; // backend observation freshness window
@@ -61,6 +62,13 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
 
   const activeTasks = state.assignments.filter((a) => a.status !== "completed");
   const taskByCasualty = new Map(activeTasks.map((a) => [a.casualty_id, a]));
+  const invalidated = useMemo(() => getInvalidatedAssignments(state), [state]);
+  const invalidatedIds = useMemo(() => new Set(invalidated.map((i) => i.assignment.id)), [invalidated]);
+  const alternatives = useMemo(
+    () => invalidated.map((i) => i.alternativeRoute).filter((r): r is AStarRoute => !!r),
+    [invalidated],
+  );
+  const mapRevision = scene.scene_map?.revision;
   const proposed = proposal && proposal.status !== "dispatched" ? proposal.assignments : [];
   const resolved = new Set(state.resolved_casualty_ids);
   const trackByCasualty = new Map(state.tracks.filter((t) => t.casualty_id).map((t) => [t.casualty_id!, t]));
@@ -171,24 +179,84 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
         </text>
       </g>
 
-      {/* active (dispatched) routes */}
-      {activeTasks.map(
-        (a) =>
-          a.route && (
+      {/* active (dispatched) routes: invalidated and stale routes render as history */}
+      {activeTasks.map((a) => {
+        if (!a.route) return null;
+        const isInvalid = invalidatedIds.has(a.id);
+        const stale = !isInvalid && isRouteStale(a.route, mapRevision);
+        const dimmed = focusResponderId && a.responder_id !== focusResponderId;
+        if (isInvalid) {
+          return (
+            <g key={a.id} pointerEvents="none" opacity={dimmed ? 0.45 : 0.9}>
+              <path
+                d={path(a.route)}
+                fill="none"
+                stroke="var(--danger)"
+                strokeWidth={0.16}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                strokeDasharray="0.35 0.25"
+                opacity={0.85}
+              />
+              <path
+                d={path(a.route)}
+                fill="none"
+                stroke="var(--map-mark-bg)"
+                strokeWidth={0.05}
+                strokeLinejoin="round"
+                opacity={0.7}
+              />
+            </g>
+          );
+        }
+        if (stale) {
+          return (
             <path
               key={a.id}
               d={path(a.route)}
               fill="none"
               stroke={TASK_COLOR[a.status]}
-              strokeWidth={0.16}
+              strokeWidth={0.12}
               strokeLinejoin="round"
               strokeLinecap="round"
+              strokeDasharray="0.4 0.3"
               markerEnd="url(#arrow)"
-              opacity={focusResponderId && a.responder_id !== focusResponderId ? 0.4 : 0.95}
+              opacity={dimmed ? 0.3 : 0.55}
               pointerEvents="none"
             />
-          ),
-      )}
+          );
+        }
+        return (
+          <path
+            key={a.id}
+            d={path(a.route)}
+            fill="none"
+            stroke={TASK_COLOR[a.status]}
+            strokeWidth={0.16}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            markerEnd="url(#arrow)"
+            opacity={dimmed ? 0.4 : 0.95}
+            pointerEvents="none"
+          />
+        );
+      })}
+
+      {/* advisory alternatives for invalidated routes (require new approval) */}
+      {alternatives.map((r, i) => (
+        <path
+          key={`alt-${i}`}
+          d={path(r)}
+          fill="none"
+          stroke="var(--info)"
+          strokeWidth={0.12}
+          strokeDasharray="0.5 0.35"
+          strokeLinejoin="round"
+          markerEnd="url(#arrow)"
+          opacity={0.9}
+          pointerEvents="none"
+        />
+      ))}
 
       {/* replaced proposal (for comparison) */}
       {ghostRoutes.map((g, i) => (

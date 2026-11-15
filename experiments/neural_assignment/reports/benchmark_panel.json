@@ -1,0 +1,104 @@
+{
+  "schema_version": "1.0",
+  "artifact_id": "aegis-neural-assignment-benchmark-v1",
+  "title": "Synthetic Neural Assignment Surrogate vs. Exact OR-Tools Benchmark",
+  "synthetic_only": true,
+  "experimental_evidence": true,
+  "mode": "simulation",
+  "authorizes_dispatch": false,
+  "disclaimer": "Offline synthetic simulation evidence only. Neural scores are decoded through a hard-constraint feasibility filter and never authorize dispatch, infer clinical triage severity, or replace the production OR-Tools CP-SAT optimizer.",
+  "dataset_counts": {
+    "train_scenarios": 5000,
+    "val_scenarios": 600,
+    "test_id_scenarios": 600,
+    "test_ood_scenarios": 600,
+    "total_heldout_test_scenarios": 1200
+  },
+  "combined_heldout_1200_summary": {
+    "ortools": {
+      "mean_assigned": 1.6608,
+      "mean_priority_points": 2.7108,
+      "mean_travel_distance_m": 14.7583,
+      "zero_regret_optimal_rate": 1.0,
+      "zero_regret_ci95_halfwidth": 0.0,
+      "exact_pair_match_rate": 1.0,
+      "raw_invalid_proposals_before_filter": 0,
+      "committed_constraint_violations": 0,
+      "end_to_end_latency_ms": 1.2371
+    },
+    "nearest": {
+      "mean_assigned": 1.5967,
+      "mean_priority_points": 2.3925,
+      "mean_travel_distance_m": 12.54,
+      "zero_regret_optimal_rate": 0.7392,
+      "zero_regret_ci95_halfwidth": 0.0249,
+      "exact_pair_match_rate": 0.7083,
+      "raw_invalid_proposals_before_filter": 0,
+      "committed_constraint_violations": 0,
+      "end_to_end_latency_ms": 0.5357
+    },
+    "mlp_greedy": {
+      "mean_assigned": 1.6464,
+      "mean_priority_points": 2.6703,
+      "mean_travel_distance_m": 14.5958,
+      "zero_regret_optimal_rate": 0.8931,
+      "zero_regret_ci95_halfwidth": 0.0101,
+      "exact_pair_match_rate": 0.8508,
+      "raw_invalid_proposals_before_filter": 0,
+      "committed_constraint_violations": 0,
+      "end_to_end_latency_ms": 1.1188
+    },
+    "mlp_matching": {
+      "mean_assigned": 1.6608,
+      "mean_priority_points": 2.6869,
+      "mean_travel_distance_m": 14.7553,
+      "zero_regret_optimal_rate": 0.9342,
+      "zero_regret_ci95_halfwidth": 0.0081,
+      "exact_pair_match_rate": 0.8892,
+      "raw_invalid_proposals_before_filter": 0,
+      "committed_constraint_violations": 0,
+      "end_to_end_latency_ms": 1.1379
+    },
+    "gnn_greedy": {
+      "mean_assigned": 1.6594,
+      "mean_priority_points": 2.7011,
+      "mean_travel_distance_m": 14.7525,
+      "zero_regret_optimal_rate": 0.9661,
+      "zero_regret_ci95_halfwidth": 0.0059,
+      "exact_pair_match_rate": 0.925,
+      "raw_invalid_proposals_before_filter": 1,
+      "committed_constraint_violations": 0,
+      "end_to_end_latency_ms": 2.0639
+    },
+    "gnn_matching": {
+      "mean_assigned": 1.6608,
+      "mean_priority_points": 2.7017,
+      "mean_travel_distance_m": 14.7731,
+      "zero_regret_optimal_rate": 0.9708,
+      "zero_regret_ci95_halfwidth": 0.0055,
+      "exact_pair_match_rate": 0.9286,
+      "raw_invalid_proposals_before_filter": 1,
+      "committed_constraint_violations": 0,
+      "end_to_end_latency_ms": 2.0759
+    }
+  },
+  "generalization_breakdown": {
+    "in_distribution_600": {
+      "ortools": 1.0,
+      "nearest": 0.7467,
+      "mlp_greedy": 0.8917,
+      "mlp_matching": 0.9406,
+      "gnn_greedy": 0.9739,
+      "gnn_matching": 0.9767
+    },
+    "out_of_distribution_unseen_maps_600": {
+      "ortools": 1.0,
+      "nearest": 0.7317,
+      "mlp_greedy": 0.8944,
+      "mlp_matching": 0.9278,
+      "gnn_greedy": 0.9583,
+      "gnn_matching": 0.965
+    }
+  },
+  "recommendation": "Keep OR-Tools as the authoritative AEGIS solver. Constrained neural matching (especially Bipartite GNN + Constrained Matching) substantially outperforms the greedy nearest-responder baseline on priority points and optimal agreement while guaranteeing zero constraint violations via the independent hard feasibility gate, but remains an approximate surrogate with non-zero regret relative to exact CP-SAT."
+}

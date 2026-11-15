@@ -19,6 +19,8 @@
 .EXAMPLE
   .\hardware\scripts\start-bridge.ps1 -Local          # backend on this laptop
 .EXAMPLE
+  .\hardware\scripts\start-bridge.ps1 -Wifi -Local -Device 2   # second Arduino, in a second terminal
+.EXAMPLE
   .\hardware\scripts\start-bridge.ps1 -Backend prince-laptop -CheckOnly
 #>
 param(
@@ -29,12 +31,17 @@ param(
     [switch]$Wifi,                      # Arduino carried by the responder, on this laptop's hotspot
     [string]$WifiListen = "192.168.137.1:7777",  # for a phone hotspot: this laptop's IP there, e.g. 172.20.10.4:7777
     [switch]$Local,                     # backend runs on this laptop (no Tailscale needed)
-    [string]$Responder = "responder-001",
+    [ValidateRange(1, 4)][int]$Device = 1,       # second Arduino: -Device 2 (port 7778, responder-002)
+    [string]$Responder,                 # default: responder-00<Device>
     [double]$HttpTimeout = 3.0,         # generous for crowded WiFi
     [switch]$CheckOnly                  # run the checks, do not start the bridge
 )
 
 $ErrorActionPreference = "Stop"
+if (-not $Responder) { $Responder = "responder-{0:d3}" -f $Device }
+if ($Device -gt 1 -and -not $PSBoundParameters.ContainsKey("WifiListen")) {
+    $WifiListen = "192.168.137.1:{0}" -f (7777 + $Device - 1)
+}
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 
 function Say($text, $color = "Gray") { Write-Host $text -ForegroundColor $color }
@@ -138,6 +145,7 @@ if ($CheckOnly) { Say "All checks passed; not starting the bridge (-CheckOnly)."
 # 4. Run the bridge; restart it if it ever exits with an error.
 $bridgeArgs = @("run", "--with", "pyserial", "python", "-m", "hardware.bridge") + $deviceArgs + @(
     "--backend-url", $backendUrl, "--responder", $Responder, "--http-timeout", "$HttpTimeout")
+if ($Device -gt 1) { $bridgeArgs += @("--log", "hardware/logs/device-events-$Responder.jsonl") }
 Push-Location $repoRoot
 try {
     while ($true) {
