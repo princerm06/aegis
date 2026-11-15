@@ -219,6 +219,7 @@ function PushToTalk({ name, onLog }: { name: string; onLog: (t: string, k: "voic
   const audioRef = useRef<HTMLAudioElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const startedAt = useRef<number>(0);
+  const talkingRef = useRef<boolean>(false);
   const canSink = typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype;
 
   const enable = async () => {
@@ -250,12 +251,20 @@ function PushToTalk({ name, onLog }: { name: string; onLog: (t: string, k: "voic
     (on: boolean) => {
       const s = streamRef.current;
       if (!s) return;
-      s.getAudioTracks().forEach((t) => (t.enabled = on));
-      setTalking((prev) => {
-        if (on && !prev) startedAt.current = Date.now();
-        if (!on && prev) onLog(`Voice to ${name} (${Math.max(1, Math.round((Date.now() - startedAt.current) / 1000))}s)`, "voice");
-        return on;
-      });
+      if (on) {
+        if (talkingRef.current) return;
+        talkingRef.current = true;
+        startedAt.current = Date.now();
+        s.getAudioTracks().forEach((t) => (t.enabled = true));
+        setTalking(true);
+      } else {
+        if (!talkingRef.current) return;
+        talkingRef.current = false;
+        s.getAudioTracks().forEach((t) => (t.enabled = false));
+        setTalking(false);
+        const duration = Math.max(1, Math.round((Date.now() - startedAt.current) / 1000));
+        onLog(`Voice to ${name} (${duration}s)`, "voice");
+      }
     },
     [name, onLog],
   );

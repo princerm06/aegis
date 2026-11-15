@@ -27,6 +27,6 @@ ems = [
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests", "optimization/tests", "hardware/tests", "experiments/neural_assignment/tests"]
+testpaths = ["backend/tests", "optimization/tests", "hardware/tests", "voice/tests", "experiments/neural_assignment/tests"]
 pythonpath = [".", "experiments/neural_assignment/src"]
 addopts = "-ra"

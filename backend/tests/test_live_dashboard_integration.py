@@ -17,8 +17,15 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+torch = pytest.importorskip("torch", reason="Optional PyTorch dependency required for neural shadow live tests")
+
+from backend.app.intelligence.neural_shadow import DEFAULT_WEIGHTS_DIR
 from backend.app.main import create_app
 from backend.app.services.scenarios import load_demo_scenario
+
+_weights_available = (DEFAULT_WEIGHTS_DIR / "mlp_seed42.pt").is_file() and (DEFAULT_WEIGHTS_DIR / "gnn_seed42.pt").is_file()
+if not _weights_available:
+    pytest.skip("Neural shadow checkpoints (mlp_seed42.pt, gnn_seed42.pt) not provisioned in weights/", allow_module_level=True)
 
 
 @pytest.fixture
