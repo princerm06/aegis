@@ -87,6 +87,7 @@ ports 8000 and 3000 (hotspot devices only). Logs: `hardware/logs/demo-host/`.
 | File | Needed for |
 | --- | --- |
 | `voice/.env` (ElevenLabs key) | spoken Voice; without it Voice is text-only |
+| `backend/.env` (Twilio keys, responder phone numbers) | Call button in Comms; without it the button says calls are not set up |
 | `experiments/neural_assignment/weights/` | neural shadow advisory (`-Neural`) |
 | `hardware/firmware/aegis_responder/arduino_secrets.h` | flashing the UNO R4 only |
 
