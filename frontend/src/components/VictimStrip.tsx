@@ -1,8 +1,8 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FieldNote, Tri } from "@/lib/fieldNotes";
-import { SEVERITIES, SEVERITY_META, ageSeconds, humanize, responderName, shortId } from "@/lib/format";
+import { SEVERITIES, SEVERITY_META, ageSeconds, humanize, responderName, shortId, trackLabel } from "@/lib/format";
 import { signLines, type SignLine } from "@/lib/insights";
 import type { SensorReading } from "@/lib/preview";
 import type { Casualty, Severity, SimulationProposal, SimulationState, TrackRecord } from "@/lib/types";
@@ -39,6 +39,15 @@ export function VictimStrip(props: Props) {
   const unassessed = cas.filter((c) => !c.medical_assessment).length;
   const bleeding = cas.filter((c) => note(c.id).bleeding === "yes" || signsFor(state, c.id)?.signs.visible_blood?.value === "detected").length;
   const pulsed = cas.filter((c) => note(c.id).pulse || sensor(c.id)).length;
+  // Pending queue, freshest first. Display order only — nothing is auto-confirmed or discarded.
+  const queue = useMemo(
+    () =>
+      state.tracks
+        .filter((t) => !t.casualty_id)
+        .sort((a, b) => +new Date(b.latest_observation.observed_at) - +new Date(a.latest_observation.observed_at)),
+    [state.tracks],
+  );
+  const [queueOpen, setQueueOpen] = useState(true);
 
   const wrap = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -56,13 +65,17 @@ export function VictimStrip(props: Props) {
   }, [editing]);
 
   return (
-    <section ref={wrap} className="panel relative flex min-w-0">
+    <section ref={wrap} className="panel relative flex min-w-0" aria-label="Victims and pending observations">
       {/* summary */}
       <div className="flex w-[150px] shrink-0 flex-col justify-between border-r border-line px-3 py-2">
         <div>
           <div className="label !text-text">Victims</div>
           <div className="mono text-3xl font-semibold leading-none">{cas.length}</div>
-          {unlinked.length > 0 && <div className="text-[10.5px] text-warn">+{unlinked.length} unconfirmed</div>}
+          {unlinked.length > 0 && (
+            <button onClick={() => setQueueOpen((v) => !v)} className="text-[10.5px] text-warn hover:underline" title={queueOpen ? "Collapse observation queue" : "Expand observation queue"}>
+              +{unlinked.length} unconfirmed {queueOpen ? "▾" : "▸"}
+            </button>
+          )}
         </div>
         <div className="mono space-y-0.5 text-[10.5px]">
           <div className="flex gap-2">
@@ -80,16 +93,42 @@ export function VictimStrip(props: Props) {
         </div>
       </div>
 
-      {/* cards */}
-      <div ref={scroller} className="scrollbar-thin flex min-w-0 flex-1 gap-2 overflow-x-auto p-2">
+      {/* confirmed casualties — visual priority, horizontal scroll */}
+      <div ref={scroller} className="scrollbar-thin flex min-w-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden p-2" aria-label="Confirmed victims">
         {cas.map((c) => (
           <VictimCard key={c.id} c={c} {...props} />
         ))}
-        {unlinked.map((t) => (
-          <DetectionCard key={t.track_id} track={t} {...props} />
-        ))}
-        {cas.length === 0 && unlinked.length === 0 && <p className="self-center px-4 text-xs text-muted">No victims detected yet.</p>}
+        {cas.length === 0 && <p className="self-center px-4 text-xs text-muted">No confirmed victims yet.</p>}
       </div>
+
+      {/* pending CV observations — separate queue, vertical scroll, collapsible */}
+      {unlinked.length > 0 && queueOpen && (
+        <div className="flex w-[252px] shrink-0 flex-col border-l border-line" aria-label="Pending observations">
+          <div className="flex items-center gap-1.5 border-b border-line px-2 py-1">
+            <span className="label !text-[9.5px] !text-warn">Observations</span>
+            <span className="mono text-[10px] text-warn">{unlinked.length} pending</span>
+            <button onClick={() => setQueueOpen(false)} className="mono ml-auto text-muted hover:text-text" aria-label="Collapse observation queue" title="Collapse">
+              ›
+            </button>
+          </div>
+          <div className="scrollbar-thin min-h-0 flex-1 space-y-1 overflow-y-auto p-1.5">
+            {queue.map((t) => (
+              <DetectionRow key={t.track_id} track={t} {...props} />
+            ))}
+          </div>
+        </div>
+      )}
+      {unlinked.length > 0 && !queueOpen && (
+        <button
+          onClick={() => setQueueOpen(true)}
+          className="flex w-8 shrink-0 flex-col items-center justify-center gap-1 border-l border-line text-warn hover:bg-panel-2"
+          aria-label={`Expand observation queue, ${unlinked.length} pending`}
+          title="Expand observation queue"
+        >
+          <span className="mono text-[11px] font-bold [writing-mode:vertical-rl]">OBS {unlinked.length}</span>
+          <span className="mono text-[11px]">‹</span>
+        </button>
+      )}
 
       {editing && (
         <Editor
@@ -360,44 +399,49 @@ function TriPicker({ label, v, onChange }: { label: string; v: Tri; onChange: (v
   );
 }
 
-function DetectionCard({ track, state, busy, now, selectedId, onSelect, onAssociate, flashing }: Props & { track: TrackRecord }) {
+function DetectionRow({ track, state, busy, now, selectedId, onSelect, onAssociate, flashing }: Props & { track: TrackRecord }) {
   const [target, setTarget] = useState("");
   const age = ageSeconds(track.latest_observation.observed_at, now);
+  const stale = age > STALE_S;
+  const conf = Math.round(track.latest_observation.confidence * 100);
   const nextId = () => {
     const nums = state.scenario.casualties.map((c) => Number(c.id.match(/(\d+)$/)?.[1] ?? 0));
     return `casualty-${String(Math.max(0, ...nums) + 1).padStart(3, "0")}`;
   };
   return (
     <article
-      onClick={() => onSelect(track.track_id)}
-      className={`flex w-[214px] shrink-0 flex-col gap-1.5 rounded border border-dashed bg-panel-2 p-2 ${
-        selectedId === track.track_id ? "border-warn" : "border-warn/50"
+      onClick={() => onSelect(selectedId === track.track_id ? null : track.track_id)}
+      title={`Track ${track.track_id}\ncamera ${track.camera?.camera_id ?? "unknown"} · ${track.camera?.local_track_id ?? "—"}\n${track.observation_count} obs · seen ${age}s ago`}
+      className={`cursor-pointer rounded border border-dashed bg-panel-2 px-1.5 py-1 ${
+        selectedId === track.track_id ? "border-warn" : "border-warn/50 hover:border-warn/80"
       } ${flashing.has(track.track_id) ? "flash" : ""}`}
     >
-      <div className="flex items-center gap-1.5">
-        <span className="mono text-xs font-semibold text-warn">{track.camera?.local_track_id ?? shortId(track.track_id)}</span>
-        <span className={`mono text-[9.5px] ${age > STALE_S ? "text-warn" : "text-accent"}`}>
-          ◉ {Math.round(track.latest_observation.confidence * 100)}% · {age}s
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className="mono min-w-0 flex-1 truncate text-[11.5px] font-semibold text-warn">{trackLabel(track)}</span>
+        <span className={`mono shrink-0 text-[10px] ${stale ? "text-warn" : "text-accent"}`}>
+          {conf}% · {age}s{stale ? " STALE" : ""}
         </span>
       </div>
-      <p className="text-[10.5px] text-muted">Person detected by camera — not yet confirmed as a victim.</p>
-      <div className="mt-auto flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
-        <Button size="sm" variant="warn" disabled={busy} onClick={() => onAssociate(track.track_id, nextId(), true)}>
-          Confirm new victim
+      <div className="mt-1 flex gap-1" onClick={(e) => e.stopPropagation()}>
+        <Button size="sm" variant="warn" disabled={busy} onClick={() => onAssociate(track.track_id, nextId(), true)} title="Confirm as a new victim">
+          Confirm
         </Button>
-        <div className="flex gap-1">
-          <select value={target} onChange={(e) => setTarget(e.target.value)} className="mono min-w-0 flex-1 rounded border border-line-strong bg-bg px-1 text-[10.5px]">
-            <option value="">same as…</option>
-            {state.scenario.casualties.map((c) => (
-              <option key={c.id} value={c.id}>
-                {shortId(c.id)}
-              </option>
-            ))}
-          </select>
-          <Button size="sm" disabled={busy || !target} onClick={() => onAssociate(track.track_id, target, false)}>
-            Link
-          </Button>
-        </div>
+        <select
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          aria-label={`Link ${trackLabel(track)} to an existing victim`}
+          className="mono min-w-0 flex-1 rounded border border-line-strong bg-bg px-1 text-[10.5px]"
+        >
+          <option value="">same as…</option>
+          {state.scenario.casualties.map((c) => (
+            <option key={c.id} value={c.id}>
+              {shortId(c.id)}
+            </option>
+          ))}
+        </select>
+        <Button size="sm" disabled={busy || !target} onClick={() => onAssociate(track.track_id, target, false)}>
+          Link
+        </Button>
       </div>
     </article>
   );

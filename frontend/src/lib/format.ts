@@ -20,6 +20,14 @@ export function shortId(id: string): string {
   return id.length > 18 ? `…${id.slice(-14)}` : id;
 }
 
+/** Short display label for a CV track: camera-local id, else the trailing id segment. */
+export function trackLabel(t: { track_id: string; camera?: { local_track_id: string } | null }): string {
+  const local = t.camera?.local_track_id;
+  if (local) return local.length > 16 ? `…${local.slice(-13)}` : local;
+  const tail = t.track_id.includes(":") ? t.track_id.split(":").pop()! : t.track_id;
+  return tail.length > 12 ? `…${tail.slice(-9)}` : tail;
+}
+
 export function responderName(state: SimulationState | null, id: string): string {
   const r = state?.scenario.responders.find((x) => x.id === id);
   return r ? r.display_name.replace(/^Mock Responder /, "") : shortId(id);

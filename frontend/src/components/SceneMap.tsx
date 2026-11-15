@@ -1,10 +1,15 @@
 "use client";
 
 import { useMemo, useRef } from "react";
-import { SEVERITY_META, ageSeconds, meters, shortId } from "@/lib/format";
+import { SEVERITY_META, ageSeconds, meters, shortId, trackLabel } from "@/lib/format";
 import type { AStarRoute, AssignmentStatus, SimulationProposal, SimulationState } from "@/lib/types";
 
 const STALE_S = 30; // backend observation freshness window
+
+/** Dark halo behind map labels so text stays readable over boxes, routes, and floor plans. */
+const HALO = { paintOrder: "stroke", stroke: "var(--map-floor)", strokeWidth: 0.14, strokeLinejoin: "round" } as const;
+
+const RESPONDER_SHORT = { available: "AVAIL", busy: "BUSY", offline: "OFF" } as const;
 
 const TASK_COLOR: Record<AssignmentStatus, string> = {
   dispatched: "var(--warn)",
@@ -54,7 +59,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
     return { x0, y0, w: Math.max(10, Math.max(...xs) - x0 + 2), h: Math.max(10, Math.max(...ys) - y0 + 2) };
   }, [grid, scene.casualties, scene.responders]);
 
-  const PAD = 1.6;
+  const PAD = 1.3; // framing only; X/Y coordinate mapping is untouched
   const X = (x: number) => x - bounds.x0;
   const Y = (y: number) => bounds.h - (y - bounds.y0); // +y is north/up on the shared map
   const path = (r: AStarRoute) => r.waypoints.map((p, i) => `${i ? "L" : "M"}${X(p.x_m)},${Y(p.y_m)}`).join(" ");
@@ -154,7 +159,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
       {/* axis ticks (meters) */}
       <g className="mono" fontSize={0.42} fill="var(--faint)" pointerEvents="none">
         {ticks(bounds.w, 4).map((t) => (
-          <text key={`x${t}`} x={t} y={bounds.h + 1.25} textAnchor="middle">
+          <text key={`x${t}`} x={t} y={bounds.h + 0.95} textAnchor="middle">
             {Math.round(bounds.x0 + t)}
           </text>
         ))}
@@ -224,7 +229,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
               {(() => {
                 const mid = a.route.waypoints[Math.floor(a.route.waypoints.length / 3)];
                 return (
-                  <text x={X(mid.x_m) + 0.35} y={Y(mid.y_m) - 0.35} fontSize={0.5} fill="var(--accent)" className="mono">
+                  <text x={X(mid.x_m) + 0.35} y={Y(mid.y_m) - 0.35} fontSize={0.5} fill="var(--accent)" className="mono" {...HALO}>
                     {meters(a.route.distance_m)}
                   </text>
                 );
@@ -233,7 +238,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
           ),
       )}
 
-      {/* CV tracks */}
+      {/* CV track boxes (labels render in a later pass, on top of markers) */}
       {state.tracks.map((t) => {
         const o = t.latest_observation;
         const stale = ageSeconds(o.observed_at, now) > STALE_S || (t.latest_observation.track?.state ?? "visible") !== "visible";
@@ -245,13 +250,14 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
         return (
           <g
             key={t.track_id}
-            opacity={stale ? 0.45 : 0.35 + 0.65 * o.confidence}
+            opacity={stale ? 0.55 : 0.35 + 0.65 * o.confidence}
             onClick={(e) => {
               e.stopPropagation();
               onSelect(t.track_id);
             }}
             className="cursor-pointer"
           >
+            <title>{`${t.track_id} · ${Math.round(o.confidence * 100)}%${stale ? " · stale" : ""}`}</title>
             <rect
               x={x - s}
               y={y - s}
@@ -263,11 +269,6 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
               strokeDasharray={stale ? "0.2 0.15" : "0.5 1.3"}
               strokeDashoffset={0.25}
             />
-            {!linked && (
-              <text x={x + s + 0.15} y={y - s + 0.4} fontSize={0.42} fill={color} className="mono">
-                {t.camera?.local_track_id ?? shortId(t.track_id)} {Math.round(o.confidence * 100)}%{stale ? " STALE" : ""}
-              </text>
-            )}
             {t.camera?.location_basis === "zone_estimate" && (
               <circle cx={x} cy={y} r={1.6} fill="none" stroke={color} strokeWidth={0.03} strokeDasharray="0.15 0.15" />
             )}
@@ -315,10 +316,10 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
             {done && (
               <path d={`M${x - 0.28},${y} l0.2,0.22 l0.38,-0.44`} fill="none" stroke="var(--text)" strokeWidth={0.12} />
             )}
-            <text x={x} y={y - 0.95} fontSize={0.5} textAnchor="middle" fill="var(--text)" className="mono" fontWeight={600}>
+            <text x={x} y={y - 0.95} fontSize={0.5} textAnchor="middle" fill="var(--text)" className="mono" fontWeight={600} {...HALO}>
               {shortId(c.id)}
             </text>
-            <text x={x} y={y + 1.25} fontSize={0.38} textAnchor="middle" fill={meta.color} className="mono" letterSpacing={0.04}>
+            <text x={x} y={y + 1.25} fontSize={0.38} textAnchor="middle" fill={meta.color} className="mono" letterSpacing={0.04} {...HALO}>
               {meta.label.toUpperCase()}
               {stale ? " · STALE" : ""}
               {task ? ` · ${task.status.toUpperCase()}` : ""}
@@ -327,6 +328,33 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
         );
       })}
 
+      {/* unlinked CV labels: own pass so text sits above markers; staggered sides, flipped below near the top edge */}
+      <g pointerEvents="none" className="mono" fontSize={0.42}>
+        {state.tracks.map((t, i) => {
+          if (t.casualty_id) return null;
+          const o = t.latest_observation;
+          const stale = ageSeconds(o.observed_at, now) > STALE_S || (o.track?.state ?? "visible") !== "visible";
+          const x = X(o.position.x_m);
+          const y = Y(o.position.y_m);
+          const s = 0.9;
+          const left = i % 2 === 1;
+          const belowBox = y < 2.0;
+          return (
+            <text
+              key={t.track_id}
+              x={left ? x - s - 0.15 : x + s + 0.15}
+              y={belowBox ? y + s + 0.55 : y - s + 0.4}
+              textAnchor={left ? "end" : "start"}
+              fill="var(--warn)"
+              opacity={stale ? 0.75 : 0.5 + 0.5 * o.confidence}
+              {...HALO}
+            >
+              {trackLabel(t)} {Math.round(o.confidence * 100)}%{stale ? " STALE" : ""}
+            </text>
+          );
+        })}
+      </g>
+
       {/* responders */}
       {scene.responders.map((r) => {
         const x = X(r.position.x_m);
@@ -334,6 +362,9 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
         const color = r.status === "available" ? "var(--accent)" : r.status === "busy" ? "var(--warn)" : "var(--faint)";
         const sel = selectedId === r.id || focusResponderId === r.id;
         const letter = r.display_name.replace(/^Mock Responder /, "").charAt(0).toUpperCase();
+        const nearLeft = x < 3;
+        const nearRight = x > bounds.w - 3;
+        const nearTop = y < 2.2;
         return (
           <g
             key={r.id}
@@ -343,6 +374,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
             }}
             className="cursor-pointer"
           >
+            <title>{`${r.display_name} · ${r.status}`}</title>
             {sel && <rect x={x - 0.95} y={y - 0.95} width={1.9} height={1.9} rx={0.3} fill="none" stroke="var(--text)" strokeWidth={0.06} />}
             <rect x={x - 0.6} y={y - 0.6} width={1.2} height={1.2} rx={0.18} fill="var(--map-mark-bg)" stroke={color} strokeWidth={0.12} />
             <text x={x} y={y + 0.22} fontSize={0.62} textAnchor="middle" fill={color} fontWeight={700} className="mono">
@@ -352,14 +384,15 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
               <path d={`M${x - 0.6},${y - 0.6} L${x + 0.6},${y + 0.6}`} stroke="var(--danger)" strokeWidth={0.1} />
             )}
             <text
-              x={x < 3 ? x - 0.6 : x > bounds.w - 3 ? x + 0.6 : x}
-              y={y - 0.85}
+              x={nearLeft ? x - 0.6 : nearRight ? x + 0.6 : x}
+              y={nearTop ? y + 1.25 : y - 0.85}
               fontSize={0.42}
-              textAnchor={x < 3 ? "start" : x > bounds.w - 3 ? "end" : "middle"}
+              textAnchor={nearLeft ? "start" : nearRight ? "end" : "middle"}
               fill={color}
               className="mono"
+              {...HALO}
             >
-              {shortId(r.id)} · {r.status.toUpperCase()}
+              {shortId(r.id)} · {RESPONDER_SHORT[r.status]}
             </text>
           </g>
         );

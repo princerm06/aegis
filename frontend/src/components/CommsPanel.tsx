@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SEVERITY_META, clock, meters, responderName, shortId } from "@/lib/format";
+import { assessMediaSupport, friendlyMediaError, mediaBlockerCopy, readMediaEnvironment, type MediaBlockerKind } from "@/lib/mediaCapabilities";
 import { directHint, routeToSteps } from "@/lib/navigation";
 import type { AStarRoute, ResponderStatus, SimulationProposal, SimulationState } from "@/lib/types";
 import { Badge } from "./ui";
@@ -214,6 +215,7 @@ function PushToTalk({ name, onLog }: { name: string; onLog: (t: string, k: "voic
   const [ready, setReady] = useState(false);
   const [talking, setTalking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blocker, setBlocker] = useState<MediaBlockerKind>("none");
   const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([]);
   const [sink, setSink] = useState("");
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -222,6 +224,13 @@ function PushToTalk({ name, onLog }: { name: string; onLog: (t: string, k: "voic
   const canSink = typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype;
 
   const enable = async () => {
+    const found = assessMediaSupport(readMediaEnvironment());
+    if (found.kind !== "none") {
+      setBlocker(found.kind);
+      setError(mediaBlockerCopy(found.kind).short);
+      return;
+    }
+    setBlocker("none");
     try {
       const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       s.getAudioTracks().forEach((t) => (t.enabled = false));
@@ -235,7 +244,7 @@ function PushToTalk({ name, onLog }: { name: string; onLog: (t: string, k: "voic
       setReady(true);
       setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(friendlyMediaError(e));
     }
   };
 
@@ -285,11 +294,14 @@ function PushToTalk({ name, onLog }: { name: string; onLog: (t: string, k: "voic
     <div className="rounded border border-line bg-panel-2 p-2">
       <audio ref={audioRef} hidden />
       {!ready ? (
-        <div className="flex items-center gap-2">
-          <button onClick={enable} className="rounded border border-accent/60 px-2.5 py-1 text-[11px] text-accent hover:bg-accent/10">
-            Enable voice link
-          </button>
-          <span className="text-[10.5px] text-muted">{error ? <span className="text-danger">{error}</span> : `Mic → ${name}'s speaker`}</span>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <button onClick={enable} className="rounded border border-accent/60 px-2.5 py-1 text-[11px] text-accent hover:bg-accent/10">
+              Enable voice link
+            </button>
+            <span className="text-[10.5px] text-muted">{error ? <span className="text-danger">{error}</span> : `Mic → ${name}'s speaker`}</span>
+          </div>
+          {blocker !== "none" && <p className="text-[10.5px] leading-snug text-muted">{mediaBlockerCopy(blocker).body}</p>}
         </div>
       ) : (
         <div className="flex items-center gap-2">

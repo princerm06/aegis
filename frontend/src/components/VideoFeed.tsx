@@ -2,6 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { FEED_STATUS_LABEL, type FeedStatus } from "@/lib/feeds";
+import {
+  LOCAL_CAMERA_SCOPE_NOTE,
+  assessMediaSupport,
+  friendlyMediaError,
+  mediaBlockerCopy,
+  readMediaEnvironment,
+  type MediaBlockerKind,
+} from "@/lib/mediaCapabilities";
 
 /**
  * A live feed from a camera attached to this computer (Logitech webcam, or an
@@ -43,6 +51,7 @@ export function VideoFeed({ feedId, title, overlay, className = "", compact = fa
   const [videoIn, setVideoIn] = useState<MediaDeviceInfo[]>([]);
   const [audioIn, setAudioIn] = useState<MediaDeviceInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [blocker, setBlocker] = useState<MediaBlockerKind>("none");
   const [setup, setSetup] = useState(false);
   const [urlDraft, setUrlDraft] = useState("");
   const [muted, setMuted] = useState(true);
@@ -62,6 +71,7 @@ export function VideoFeed({ feedId, title, overlay, className = "", compact = fa
     setSource(s);
     setStreaming(false);
     setError(null);
+    setBlocker("none");
     try {
       localStorage.setItem(`aegis.feed.${feedId}`, JSON.stringify(s));
     } catch {
@@ -70,6 +80,15 @@ export function VideoFeed({ feedId, title, overlay, className = "", compact = fa
   };
 
   const refreshDevices = useCallback(async () => {
+    const found = assessMediaSupport(readMediaEnvironment());
+    if (found.kind !== "none") {
+      setBlocker(found.kind);
+      setVideoIn([]);
+      setAudioIn([]);
+      setError(mediaBlockerCopy(found.kind).short);
+      return;
+    }
+    setBlocker("none");
     try {
       const probe = await navigator.mediaDevices.getUserMedia({ video: true, audio: audio });
       probe.getTracks().forEach((t) => t.stop());
@@ -78,12 +97,19 @@ export function VideoFeed({ feedId, title, overlay, className = "", compact = fa
       setAudioIn(all.filter((d) => d.kind === "audioinput"));
       setError(null);
     } catch (e) {
-      setError(`Permission: ${(e as Error).message}`);
+      setError(friendlyMediaError(e));
     }
   }, [audio]);
 
   useEffect(() => {
     if (source.kind !== "device") return;
+    const found = assessMediaSupport(readMediaEnvironment());
+    if (found.kind !== "none") {
+      setBlocker(found.kind);
+      setError(mediaBlockerCopy(found.kind).short);
+      return;
+    }
+    setBlocker("none");
     let stream: MediaStream | null = null;
     let cancelled = false;
     navigator.mediaDevices
@@ -96,7 +122,7 @@ export function VideoFeed({ feedId, title, overlay, className = "", compact = fa
         stream = s;
         if (videoRef.current) videoRef.current.srcObject = s;
       })
-      .catch((e) => setError(`Cannot open: ${(e as Error).message}`));
+      .catch((e) => setError(friendlyMediaError(e)));
     return () => {
       cancelled = true;
       stream?.getTracks().forEach((t) => t.stop());
@@ -195,38 +221,48 @@ export function VideoFeed({ feedId, title, overlay, className = "", compact = fa
               ✕
             </button>
           </div>
-          {videoIn.length === 0 && <p className="text-muted">{error ?? "Requesting devices…"}</p>}
-          {videoIn.map((d) => (
-            <button
-              key={d.deviceId}
-              onClick={() => {
-                choose({ kind: "device", deviceId: d.deviceId, audioId: source.kind === "device" ? source.audioId ?? null : null });
-                setSetup(false);
-              }}
-              className={`truncate rounded border px-1.5 py-0.5 text-left hover:border-accent ${
-                source.kind === "device" && source.deviceId === d.deviceId ? "border-accent text-accent" : "border-line-strong"
-              }`}
-            >
-              📷 {d.label || "Camera"}
-            </button>
-          ))}
-          {audio && source.kind === "device" && audioIn.length > 0 && (
-            <label className="flex items-center gap-1">
-              <span className="text-muted">hear via</span>
-              <select
-                value={source.audioId ?? ""}
-                onChange={(e) => choose({ ...source, audioId: e.target.value || null })}
-                className="mono min-w-0 flex-1 rounded border border-line-strong bg-bg px-1 py-0.5"
-              >
-                <option value="">no audio</option>
-                {audioIn.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || "microphone"}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {blocker !== "none" ? (
+            <div className="rounded border border-warn/50 bg-warn/10 p-1.5">
+              <p className="font-semibold text-warn">{mediaBlockerCopy(blocker).title}</p>
+              <p className="mt-0.5 leading-snug text-muted">{mediaBlockerCopy(blocker).body}</p>
+            </div>
+          ) : (
+            <>
+              {videoIn.length === 0 && <p className="text-muted">{error ?? "Requesting devices…"}</p>}
+              {videoIn.map((d) => (
+                <button
+                  key={d.deviceId}
+                  onClick={() => {
+                    choose({ kind: "device", deviceId: d.deviceId, audioId: source.kind === "device" ? source.audioId ?? null : null });
+                    setSetup(false);
+                  }}
+                  className={`truncate rounded border px-1.5 py-0.5 text-left hover:border-accent ${
+                    source.kind === "device" && source.deviceId === d.deviceId ? "border-accent text-accent" : "border-line-strong"
+                  }`}
+                >
+                  📷 {d.label || "Camera"}
+                </button>
+              ))}
+              {audio && source.kind === "device" && audioIn.length > 0 && (
+                <label className="flex items-center gap-1">
+                  <span className="text-muted">hear via</span>
+                  <select
+                    value={source.audioId ?? ""}
+                    onChange={(e) => choose({ ...source, audioId: e.target.value || null })}
+                    className="mono min-w-0 flex-1 rounded border border-line-strong bg-bg px-1 py-0.5"
+                  >
+                    <option value="">no audio</option>
+                    {audioIn.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || "microphone"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </>
           )}
+          <p className="text-[10px] leading-snug text-faint">{LOCAL_CAMERA_SCOPE_NOTE}</p>
           <form
             className="flex gap-1"
             onSubmit={(e) => {

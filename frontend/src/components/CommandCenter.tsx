@@ -367,7 +367,7 @@ export function CommandCenter() {
         </div>
       )}
 
-      <div ref={stageRef} className="relative grid min-h-0 flex-1 grid-cols-[minmax(0,68fr)_minmax(0,32fr)] grid-rows-[minmax(0,1fr)_clamp(168px,24vh,224px)] gap-1.5">
+      <div ref={stageRef} className="relative grid min-h-0 flex-1 grid-cols-[minmax(0,70fr)_minmax(0,30fr)] grid-rows-[minmax(0,1fr)_clamp(184px,26vh,248px)] gap-1.5">
         {/* primary viewport slot — top left, largest (the active feed is positioned over it) */}
         <div ref={slotRefs[0]} className="min-h-0" />
 
