@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { operatorStep, phonePageUrl, responderStep, talkApi, talkErrorText, waitForIce, type ChannelView, type TalkSession } from "../talk";
+import { ICE_SERVERS, fetchRtcConfig, operatorStep, phonePageUrl, responderStep, talkApi, talkErrorText, waitForIce, type ChannelView, type TalkSession } from "../talk";
 
 const session = (over: Partial<TalkSession> = {}): TalkSession => ({
   session_id: "s1",
@@ -89,6 +89,35 @@ describe("waitForIce", () => {
     vi.advanceTimersByTime(2500);
     await slow;
     vi.useRealTimers();
+  });
+});
+
+describe("fetchRtcConfig", () => {
+  it("uses the host's TURN relay when it has one", async () => {
+    const config = await fetchRtcConfig(async () =>
+      new Response(
+        JSON.stringify({
+          ice_servers: [
+            { urls: ["stun:stun.l.google.com:19302"], username: null, credential: null },
+            { urls: ["turn:100.64.0.5:3478"], username: "aegis", credential: "s3cret" },
+          ],
+          ice_transport_policy: "relay",
+        }),
+      ),
+    );
+    expect(config).toEqual({
+      iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }, { urls: ["turn:100.64.0.5:3478"], username: "aegis", credential: "s3cret" }],
+      iceTransportPolicy: "relay",
+    });
+  });
+
+  it("falls back to STUN when the backend has no such endpoint or is unreachable", async () => {
+    expect(await fetchRtcConfig(async () => new Response("", { status: 404 }))).toEqual({ iceServers: ICE_SERVERS });
+    expect(
+      await fetchRtcConfig(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    ).toEqual({ iceServers: ICE_SERVERS });
   });
 });
 

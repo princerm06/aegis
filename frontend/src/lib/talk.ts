@@ -55,6 +55,28 @@ export function talkApi(doFetch: Fetch = (input, init) => fetch(input, init)) {
   };
 }
 
+interface IceConfig {
+  ice_servers: { urls: string[]; username?: string | null; credential?: string | null }[];
+  ice_transport_policy: "all" | "relay";
+}
+
+/** The host's network-path settings (STUN, plus a TURN relay if configured); never throws. */
+export async function fetchRtcConfig(doFetch: Fetch = (input, init) => fetch(input, init)): Promise<RTCConfiguration> {
+  try {
+    const res = await doFetch("/aegis-api/api/v1/simulations/talk/ice-servers", { cache: "no-store" });
+    if (!res.ok) throw new Error(String(res.status));
+    const body = (await res.json()) as IceConfig;
+    const iceServers = body.ice_servers.map(({ urls, username, credential }) => ({
+      urls,
+      ...(username ? { username } : {}),
+      ...(credential ? { credential } : {}),
+    }));
+    return { iceServers, iceTransportPolicy: body.ice_transport_policy === "relay" ? "relay" : "all" };
+  } catch {
+    return { iceServers: ICE_SERVERS };
+  }
+}
+
 /** What the phone should do with the latest heartbeat, given the call it is handling (if any). */
 export function responderStep(current: string | null, view: ChannelView): "answer" | "close" | "none" {
   const s = view.session;

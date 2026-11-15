@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { responderName } from "@/lib/format";
 import { assessMediaSupport, readMediaEnvironment } from "@/lib/mediaCapabilities";
-import { ICE_SERVERS, MIC, POLL_MS, responderStep, talkApi, talkErrorText, waitForIce } from "@/lib/talk";
+import { MIC, POLL_MS, fetchRtcConfig, responderStep, talkApi, talkErrorText, waitForIce } from "@/lib/talk";
 import type { SimulationState } from "@/lib/types";
 
 type Phase = "pick" | "ready" | "waiting" | "connecting" | "talking";
@@ -72,7 +72,9 @@ export default function ResponderPhonePage() {
       setPhase("connecting");
       const mic = micRef.current;
       if (!mic) return;
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const config = await fetchRtcConfig();
+      if (sessionRef.current !== sessionId) return;
+      const pc = new RTCPeerConnection(config);
       pcRef.current = pc;
       mic.getAudioTracks().forEach((t) => pc.addTrack(t, mic));
       pc.ontrack = (e) => {

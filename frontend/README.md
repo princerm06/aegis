@@ -82,6 +82,9 @@ The operator at the command center watches the scene and relays guidance to fire
   address via `tailscale serve --bg http://127.0.0.1:3000`; set `NEXT_PUBLIC_AEGIS_PHONE_ORIGIN`
   to that address before building to show the full link in Comms. The operator's browser needs a
   secure context too (`http://localhost:3000` on the host, or the same HTTPS address).
+  Both sides get their network settings from the backend (`/talk/ice-servers`), including an
+  optional TURN relay for when the laptop and the phone can't reach each other directly
+  (see backend/README.md, "Talk link").
 - Quick commands and directions use speech synthesis on the **system default output**.
 - Directions are map-relative (north = up); responder heading isn't tracked.
 

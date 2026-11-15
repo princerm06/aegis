@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { assessMediaSupport, readMediaEnvironment } from "@/lib/mediaCapabilities";
-import { ICE_SERVERS, MIC, POLL_MS, RING_TIMEOUT_MS, operatorStep, phonePageUrl, talkApi, talkErrorText, waitForIce } from "@/lib/talk";
+import { MIC, POLL_MS, RING_TIMEOUT_MS, fetchRtcConfig, operatorStep, phonePageUrl, talkApi, talkErrorText, waitForIce } from "@/lib/talk";
 
 type Phase = "idle" | "ringing" | "live";
 
@@ -106,9 +106,13 @@ export function TalkLink({ responderId, name, onLog }: { responderId: string; na
     setElapsed(0);
     setPhase("ringing");
     try {
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: MIC });
+      const [mic, config] = await Promise.all([navigator.mediaDevices.getUserMedia({ audio: MIC }), fetchRtcConfig()]);
+      if (call.current !== c) {
+        mic.getTracks().forEach((t) => t.stop());
+        return;
+      }
       micRef.current = mic;
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const pc = new RTCPeerConnection(config);
       pcRef.current = pc;
       mic.getAudioTracks().forEach((t) => pc.addTrack(t, mic));
       pc.ontrack = (e) => {
