@@ -5,6 +5,7 @@ import { SEVERITY_META, clock, meters, responderName, shortId } from "@/lib/form
 import { assessMediaSupport, friendlyMediaError, mediaBlockerCopy, readMediaEnvironment, type MediaBlockerKind } from "@/lib/mediaCapabilities";
 import { directHint, routeToSteps } from "@/lib/navigation";
 import type { AStarRoute, ResponderStatus, SimulationProposal, SimulationState } from "@/lib/types";
+import { TalkLink } from "./TalkLink";
 import { Badge } from "./ui";
 
 interface Props {
@@ -130,6 +131,9 @@ export function CommsPanel({ state, proposal, fighterId, onStatus, placing, onPl
           </div>
           <CustomSay onSay={speak} />
         </div>
+
+        {/* Two-way call with the responder's phone; below the existing controls so they never move. */}
+        <TalkLink responderId={f.id} name={name} onLog={addLog} />
 
         {/* navigation */}
         <div className="rounded border border-line bg-panel-2">

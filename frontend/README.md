@@ -75,6 +75,25 @@ The operator at the command center watches the scene and relays guidance to fire
   MP4/WebM as video). For bodycams, "hear via" picks an audio input so command can listen.
 - **Voice link**: the operator's mic plays out of a chosen output (e.g. a Bluetooth speaker on the
   firefighter, paired to this computer). Muted unless the talk button/Space is held.
+- **Talk to <responder>** (Comms): two-way voice with the responder's phone, browser to browser
+  (WebRTC; the backend only relays the call setup). The responder opens `/responder` on their
+  phone once, taps **Join** and keeps the page open; it answers by itself and keeps the screen
+  awake where Safari allows. Phones need HTTPS for the microphone, e.g. the host's Tailscale
+  address via `tailscale serve --bg http://127.0.0.1:3000`; set `NEXT_PUBLIC_AEGIS_PHONE_ORIGIN`
+  to that address before building to show the full link in Comms. The operator's browser needs a
+  secure context too (`http://localhost:3000` on the host, or the same HTTPS address).
+  Both sides get their network settings from the backend (`/talk/ice-servers`), including an
+  optional TURN relay for when the laptop and the phone can't reach each other directly
+  (see backend/README.md, "Talk link").
+  **Sign-in (needs the backend's talk auth, PR #37):** the operator types the talk secret once in
+  Comms; it is kept in `sessionStorage` for that tab only — never in a `NEXT_PUBLIC_*` variable or
+  the proxy. **Get phone link** mints a per-responder link (`/responder?id=…#token=…`); the link
+  is the phone's credential, so it is hidden once the phone joins and **sign out phone** revokes
+  it. The phone page moves the token out of the address bar into `sessionStorage`. States shown:
+  sign-in required, not configured (503), phone ready / not connected, connecting, ringing,
+  connected (with mute), ended, and why a call failed. This is a call to a person — separate from
+  Ask AEGIS, which only answers questions. Test: `TALK_OPERATOR_TOKEN=… node scripts/e2e-talk.mjs`
+  (throwaway secret; two browser contexts with fake microphones).
 - Quick commands and directions use speech synthesis on the **system default output**.
 - Directions are map-relative (north = up); responder heading isn't tracked.
 
