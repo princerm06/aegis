@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540" font-family="Segoe UI, system-ui, -apple-system, Helvetica, Arial, sans-serif">
+  <title>AEGIS dispatch flow (illustrative animation, simulation only)</title>
+  <style>
+    .bg { fill: #0f141a; }
+    .box { fill: #18202a; stroke: #2c3947; stroke-width: 1.5; }
+    .host { fill: none; stroke: #58a6ff; stroke-width: 1.5; stroke-dasharray: 6 5; }
+    .t { fill: #e6edf3; font-size: 16px; font-weight: 600; }
+    .s { fill: #93a1b0; font-size: 12px; }
+    .wire { stroke: #3b4a5a; stroke-width: 2; fill: none; }
+    .cap { fill: #e6edf3; font-size: 19px; font-weight: 600; text-anchor: middle; opacity: 0; }
+    .sub { fill: #93a1b0; font-size: 13px; text-anchor: middle; }
+    .btn { fill: #222c38; stroke: #3b4a5a; stroke-width: 1.5; }
+    .btnt { fill: #e6edf3; font-size: 13px; font-weight: 600; text-anchor: middle; }
+    .screen { fill: #05080b; stroke: #2c3947; }
+    .led { font-family: Consolas, ui-monospace, monospace; font-size: 40px; font-weight: 700; text-anchor: middle; opacity: 0; }
+    .red { fill: #ff5a4f; } .blue { fill: #4fa3ff; }
+    .chip { opacity: 0; }
+    .chipbox { fill: #12261a; stroke: #2ea043; }
+    .chipt { fill: #7ee787; font-size: 12px; font-weight: 600; }
+    .dot { fill: #f0c541; opacity: 0; }
+    .knob { fill: #2b3644; stroke: #55657a; stroke-width: 2; transform-box: fill-box; transform-origin: center; }
+
+    * { animation-duration: 24s; animation-iteration-count: infinite; animation-timing-function: linear; }
+
+    /* captions: one visible per step */
+    @keyframes c1 { 0%,11.5% {opacity:1} 12.5%,100% {opacity:0} }
+    @keyframes c2 { 0%,12% {opacity:0} 13%,24% {opacity:1} 25%,100% {opacity:0} }
+    @keyframes c3 { 0%,24.5% {opacity:0} 25.5%,40.5% {opacity:1} 41.5%,100% {opacity:0} }
+    @keyframes c4 { 0%,41% {opacity:0} 42%,53% {opacity:1} 54%,100% {opacity:0} }
+    @keyframes c5 { 0%,53.5% {opacity:0} 54.5%,65.5% {opacity:1} 66.5%,100% {opacity:0} }
+    @keyframes c6 { 0%,66% {opacity:0} 67%,82% {opacity:1} 83%,100% {opacity:0} }
+    @keyframes c7 { 0%,82.5% {opacity:0} 83.5%,99% {opacity:1} 100% {opacity:0} }
+    #c1 { animation-name: c1; } #c2 { animation-name: c2; } #c3 { animation-name: c3; }
+    #c4 { animation-name: c4; } #c5 { animation-name: c5; } #c6 { animation-name: c6; } #c7 { animation-name: c7; }
+
+    /* travelling signals */
+    @keyframes d1 { 0%,1% {opacity:0; transform:translate(0,0)} 2% {opacity:1; transform:translate(0,0)} 10% {opacity:1; transform:translate(90px,0)} 11%,100% {opacity:0; transform:translate(90px,0)} }
+    @keyframes d2 { 0%,13% {opacity:0; transform:translate(0,0)} 14% {opacity:1; transform:translate(0,0)} 23% {opacity:1; transform:translate(90px,0)} 24%,100% {opacity:0; transform:translate(90px,0)} }
+    @keyframes d3 { 0%,41% {opacity:0; transform:translate(0,0)} 42% {opacity:1; transform:translate(0,0)} 46% {opacity:1; transform:translate(-155px,110px)} 47%,100% {opacity:0; transform:translate(-155px,110px)} }
+    @keyframes d4 { 0%,41% {opacity:0; transform:translate(0,0)} 42% {opacity:1; transform:translate(0,0)} 46% {opacity:1; transform:translate(165px,110px)} 47%,100% {opacity:0; transform:translate(165px,110px)} }
+    @keyframes d5 { 0%,55% {opacity:0; transform:translate(0,0)} 56% {opacity:1; transform:translate(0,0)} 58% {opacity:1; transform:translate(155px,-110px)} 59%,67.5% {opacity:0; transform:translate(155px,-110px)} 68% {opacity:0; transform:translate(0,0)} 69% {opacity:1; transform:translate(0,0)} 71% {opacity:1; transform:translate(155px,-110px)} 72%,100% {opacity:0; transform:translate(155px,-110px)} }
+    @keyframes d6 { 0%,55% {opacity:0; transform:translate(0,0)} 56% {opacity:1; transform:translate(0,0)} 58% {opacity:1; transform:translate(-165px,-110px)} 59%,67.5% {opacity:0; transform:translate(-165px,-110px)} 68% {opacity:0; transform:translate(0,0)} 69% {opacity:1; transform:translate(0,0)} 71% {opacity:1; transform:translate(-165px,-110px)} 72%,100% {opacity:0; transform:translate(-165px,-110px)} }
+    #d1 { animation-name: d1; } #d2 { animation-name: d2; } #d3 { animation-name: d3; }
+    #d4 { animation-name: d4; } #d5 { animation-name: d5; } #d6 { animation-name: d6; }
+
+    /* operator buttons */
+    @keyframes approve { 0%,27% {fill:#222c38} 28%,100% {fill:#1f6feb} }
+    @keyframes dispatch { 0%,34% {fill:#222c38} 35%,100% {fill:#238636} }
+    @keyframes reset { 0%,98% {opacity:1} 99%,100% {opacity:0} }
+    #bApprove { animation-name: approve; } #bDispatch { animation-name: dispatch; }
+    #proposal { opacity: 0; animation-name: proposal; }
+    @keyframes proposal { 0%,23% {opacity:0} 24%,98% {opacity:1} 99%,100% {opacity:0} }
+
+    /* device screens: idle -> flashing label -> steady label -> OK -> idle */
+    @keyframes idle { 0%,45.5% {opacity:1} 46%,83% {opacity:0} 83.5%,100% {opacity:1} }
+    @keyframes flash { 0%,45.9% {opacity:0} 46%,47% {opacity:1} 47.1%,48% {opacity:0} 48.1%,49% {opacity:1} 49.1%,50% {opacity:0} 50.1%,51% {opacity:1} 51.1%,52% {opacity:0} 52.1%,53% {opacity:1} 53.1%,54% {opacity:0} 54.1%,55.9% {opacity:1} 56%,100% {opacity:0} }
+    @keyframes steady { 0%,55.9% {opacity:0} 56%,69.9% {opacity:1} 70%,100% {opacity:0} }
+    @keyframes okk { 0%,69.9% {opacity:0} 70%,83% {opacity:1} 83.5%,100% {opacity:0} }
+    .idle { animation-name: idle; opacity: 1; } .flash { animation-name: flash; } .steady { animation-name: steady; } .okk { animation-name: okk; }
+
+    /* button: short press, then a long hold */
+    @keyframes press { 0%,54.9% {transform:scale(1); fill:#2b3644} 55%,56% {transform:scale(.82); fill:#f0c541} 56.5%,66.4% {transform:scale(1); fill:#2b3644} 66.5%,70% {transform:scale(.82); fill:#f0c541} 70.5%,100% {transform:scale(1); fill:#2b3644} }
+    .knob { animation-name: press; }
+
+    /* dashboard status chips */
+    @keyframes delivered { 0%,46.5% {opacity:0} 47%,98% {opacity:1} 99%,100% {opacity:0} }
+    @keyframes acked { 0%,58.5% {opacity:0} 59%,98% {opacity:1} 99%,100% {opacity:0} }
+    @keyframes done { 0%,71.5% {opacity:0} 72%,98% {opacity:1} 99%,100% {opacity:0} }
+    .delivered { animation-name: delivered; } .acked { animation-name: acked; } .done { animation-name: done; }
+  </style>
+
+  <rect class="bg" width="960" height="540" rx="12"/>
+  <text x="30" y="34" class="t" font-size="18">AEGIS: how one dispatch flows</text>
+  <text x="930" y="34" class="s" text-anchor="end">SIMULATION ONLY · illustrative animation, not a recording</text>
+
+  <!-- camera -->
+  <rect class="box" x="40" y="80" width="170" height="100" rx="10"/>
+  <text x="125" y="118" class="t" text-anchor="middle">Camera</text>
+  <text x="125" y="140" class="s" text-anchor="middle">spots casualties</text>
+  <text x="125" y="158" class="s" text-anchor="middle">(AskAr's laptop)</text>
+
+  <!-- host -->
+  <rect class="host" x="285" y="58" width="650" height="140" rx="12"/>
+  <text x="297" y="74" class="s">host laptop</text>
+
+  <rect class="box" x="300" y="80" width="200" height="100" rx="10"/>
+  <text x="400" y="118" class="t" text-anchor="middle">Backend</text>
+  <text x="400" y="140" class="s" text-anchor="middle">proposes who goes where</text>
+  <text x="400" y="158" class="s" text-anchor="middle">records every event</text>
+
+  <rect class="box" x="590" y="80" width="330" height="100" rx="10"/>
+  <text x="606" y="104" class="t">Dashboard: human operator</text>
+  <text id="proposal" x="606" y="124" class="s">Proposal: A → responder 1 · B → responder 2</text>
+  <rect id="bApprove" class="btn" x="606" y="136" width="140" height="32" rx="7"/>
+  <text x="676" y="157" class="btnt">Approve</text>
+  <rect id="bDispatch" class="btn" x="764" y="136" width="140" height="32" rx="7"/>
+  <text x="834" y="157" class="btnt">Dispatch</text>
+
+  <!-- wires -->
+  <path class="wire" d="M210 130 H300"/>
+  <path class="wire" d="M500 130 H590"/>
+  <path class="wire" d="M400 180 L245 290"/>
+  <path class="wire" d="M400 180 L565 290"/>
+  <text x="292" y="240" class="s" text-anchor="end">bridge 1 · WiFi</text>
+  <text x="500" y="240" class="s">bridge 2 · WiFi</text>
+
+  <!-- device 1 -->
+  <rect class="box" x="120" y="290" width="250" height="150" rx="10"/>
+  <text x="136" y="314" class="t">Responder 1 device</text>
+  <text x="136" y="331" class="s">Arduino UNO R4 WiFi</text>
+  <rect class="screen" x="136" y="342" width="120" height="84" rx="6"/>
+  <circle class="red idle" cx="244" cy="414" r="3.5"/>
+  <text x="196" y="398" class="led red flash">A</text>
+  <text x="196" y="398" class="led red steady">A</text>
+  <text x="196" y="398" class="led red okk">OK</text>
+  <circle class="knob" cx="312" cy="384" r="24"/>
+  <text x="312" y="426" class="s" text-anchor="middle">button</text>
+
+  <!-- device 2 -->
+  <rect class="box" x="440" y="290" width="250" height="150" rx="10"/>
+  <text x="456" y="314" class="t">Responder 2 device</text>
+  <text x="456" y="331" class="s">Arduino UNO Q</text>
+  <rect class="screen" x="456" y="342" width="120" height="84" rx="6"/>
+  <circle class="blue idle" cx="564" cy="414" r="3.5"/>
+  <text x="516" y="398" class="led blue flash">B</text>
+  <text x="516" y="398" class="led blue steady">B</text>
+  <text x="516" y="398" class="led blue okk">OK</text>
+  <circle class="knob" cx="632" cy="384" r="24"/>
+  <text x="632" y="426" class="s" text-anchor="middle">button</text>
+
+  <!-- dashboard status -->
+  <rect class="box" x="720" y="290" width="210" height="150" rx="10"/>
+  <text x="736" y="314" class="t">What the operator sees</text>
+  <text x="736" y="342" class="s">Responder 1 → A</text>
+  <g class="chip delivered"><rect class="chipbox" x="736" y="350" width="62" height="20" rx="10"/><text x="767" y="364" class="chipt" text-anchor="middle">delivered</text></g>
+  <g class="chip acked"><rect class="chipbox" x="802" y="350" width="50" height="20" rx="10"/><text x="827" y="364" class="chipt" text-anchor="middle">ack</text></g>
+  <g class="chip done"><rect class="chipbox" x="856" y="350" width="56" height="20" rx="10"/><text x="884" y="364" class="chipt" text-anchor="middle">done</text></g>
+  <text x="736" y="396" class="s">Responder 2 → B</text>
+  <g class="chip delivered"><rect class="chipbox" x="736" y="404" width="62" height="20" rx="10"/><text x="767" y="418" class="chipt" text-anchor="middle">delivered</text></g>
+  <g class="chip acked"><rect class="chipbox" x="802" y="404" width="50" height="20" rx="10"/><text x="827" y="418" class="chipt" text-anchor="middle">ack</text></g>
+  <g class="chip done"><rect class="chipbox" x="856" y="404" width="56" height="20" rx="10"/><text x="884" y="418" class="chipt" text-anchor="middle">done</text></g>
+
+  <!-- signals -->
+  <circle id="d1" class="dot" cx="210" cy="130" r="7"/>
+  <circle id="d2" class="dot" cx="500" cy="130" r="7"/>
+  <circle id="d3" class="dot" cx="400" cy="180" r="7"/>
+  <circle id="d4" class="dot" cx="400" cy="180" r="7"/>
+  <circle id="d5" class="dot" cx="245" cy="290" r="7"/>
+  <circle id="d6" class="dot" cx="565" cy="290" r="7"/>
+
+  <!-- captions -->
+  <text id="c1" class="cap" x="480" y="486">1. The camera spots two casualties and reports them</text>
+  <text id="c2" class="cap" x="480" y="486">2. The backend proposes who should go to whom</text>
+  <text id="c3" class="cap" x="480" y="486">3. A human approves, then dispatches. Nothing moves before this.</text>
+  <text id="c4" class="cap" x="480" y="486">4. Each responder's device flashes their casualty</text>
+  <text id="c5" class="cap" x="480" y="486">5. Short press: "I've got it" (acknowledged)</text>
+  <text id="c6" class="cap" x="480" y="486">6. Hold two seconds: "done" (completed)</text>
+  <text id="c7" class="cap" x="480" y="486">The command center knows what was actually done</text>
+  <text class="sub" x="480" y="514">The devices only show a task and report button presses. They never approve or dispatch.</text>
+</svg>

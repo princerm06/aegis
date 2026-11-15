@@ -36,6 +36,34 @@ flowchart LR
     OPS -->|"http://192.168.137.1:3000/command"| DASH
 ```
 
+## Hybrid network (what we run)
+
+The hotspot shares one WiFi radio with campus WiFi. It is fine for the two
+Arduinos (a few bytes a second) but not for camera video from several laptops:
+with laptops on it we measured 200-800 ms delay and 10-30% packet loss, against
+about 50 ms and no loss with only the boards. So:
+
+| Device | Network | Uses |
+| --- | --- | --- |
+| UNO R4, UNO Q | `AEGIS-RESPONDER` hotspot only | `192.168.137.1:7777` / `:7778` |
+| teammates' laptops (camera, dashboards) | campus WiFi + Tailscale | the host's Tailscale address, ports 8000 and 3000 |
+| host browser | localhost | `http://localhost:3000/command` |
+
+On the host, once per boot, from an Administrator PowerShell
+(`hardware/scripts/apply-demo-network.ps1`):
+
+```powershell
+.\hardware\scripts\apply-demo-network.ps1
+```
+
+It sets the hotspot MTU to 1400 (some laptops never receive full 1500-byte
+packets from it, so large replies stalled), adds the firewall rules, and forwards
+the host's Tailscale address and `localhost:8000` to the services. It prints the
+addresses teammates use. Teammates must be in the host's tailnet, or the host
+machine must be shared with them from the Tailscale admin console.
+
+The hotspot-only layout below still works and is the fallback for small traffic.
+
 ## The flow
 
 1. The camera posts observations to the backend.

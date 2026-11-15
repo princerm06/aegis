@@ -137,14 +137,35 @@ function Show-Health {
             else { Note "bridge $n   ${HostIp}:$port listening, no device connected yet (device shows '--')" }
         }
     }
+    if (-not $NoDashboard) {
+        if (Test-Url "http://127.0.0.1:$BackendPort/health") { Ok "localhost:$BackendPort -> backend (live updates on this laptop)" }
+        else { Note "localhost:$BackendPort not forwarded: live updates will not work on http://localhost:$DashboardPort (run apply-demo-network.ps1 as Administrator)" }
+    }
+    $tsExe = "C:\Program Files\Tailscale\tailscale.exe"
+    $tsIp = if (Test-Path $tsExe) { (& $tsExe ip -4 2>$null | Select-Object -First 1) } else { $null }
+    if ($tsIp) {
+        $tsIp = $tsIp.Trim()
+        if ((Test-Url "http://${tsIp}:$BackendPort/health") -and (Test-Url "http://${tsIp}:$DashboardPort/command" 8)) {
+            Ok "Tailscale  http://${tsIp}:$DashboardPort/command and :$BackendPort (laptops on campus WiFi)"
+        } else { Note "Tailscale address $tsIp is not forwarded (run apply-demo-network.ps1 as Administrator)" }
+    }
+    $mtu = (Get-NetIPInterface -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.InterfaceIndex -eq (Get-NetIPAddress -IPAddress $HostIp -ErrorAction SilentlyContinue).InterfaceIndex }).NlMtu
+    if ($mtu -and $mtu -gt 1400) { Note "hotspot MTU is ${mtu}: large replies may stall for some laptops (run apply-demo-network.ps1 as Administrator)" }
     $rule = Get-NetFirewallRule -DisplayName "AEGIS demo host" -ErrorAction SilentlyContinue
     if ($rule) { Ok "firewall rule 'AEGIS demo host' present" }
     else { Note "firewall rule 'AEGIS demo host' missing: other laptops may be blocked (run once as Administrator)" }
 
     Say ""
-    Say "Teammates (joined to the hotspot):" "Cyan"
-    Say "  dashboard  http://${HostIp}:$DashboardPort/command"
-    Say "  camera/CV  --base-url $backendUrl"
+    if ($tsIp) {
+        Say "Teammates' laptops (campus WiFi + Tailscale; keep them off the hotspot):" "Cyan"
+        Say "  dashboard  http://${tsIp}:$DashboardPort/command"
+        Say "  camera/CV  --backend-url http://${tsIp}:$BackendPort"
+    } else {
+        Say "Teammates (joined to the hotspot):" "Cyan"
+        Say "  dashboard  http://${HostIp}:$DashboardPort/command"
+        Say "  camera/CV  --backend-url $backendUrl"
+    }
     Say "This laptop: http://localhost:$DashboardPort/command (push-to-talk works here)"
     if ($failed) { Say "$failed check(s) failed." "Red" } else { Say "All checks passed." "Green" }
 }
@@ -237,15 +258,17 @@ if (-not $NoVoice) {
 # 6. Dashboard: production build, served on the hotspot address and on localhost.
 if (-not $NoDashboard) {
     $frontend = Join-Path $repoRoot "frontend"
+    # No fixed WebSocket URL: the dashboard connects to port 8000 on the host name
+    # the page was loaded from (hotspot address, Tailscale address or localhost).
+    # apply-demo-network.ps1 makes the backend answer on the last two.
     $dashEnv = @{
-        AEGIS_BACKEND_URL       = $backendUrl
-        AEGIS_VOICE_URL         = "http://127.0.0.1:$VoicePort"
-        NEXT_PUBLIC_AEGIS_WS_URL = "ws://${HostIp}:$BackendPort"
+        AEGIS_BACKEND_URL = $backendUrl
+        AEGIS_VOICE_URL   = "http://127.0.0.1:$VoicePort"
     }
-    # The proxy targets and WebSocket URL are baked in at build time, so rebuild
-    # when they or the frontend sources change.
+    # The proxy targets are baked in at build time, so rebuild when they or the
+    # frontend sources change.
     $head = (& git -C $repoRoot log -1 --format=%H -- frontend 2>$null)
-    $stamp = "$backendUrl|$VoicePort|$head"
+    $stamp = "$backendUrl|$VoicePort|$head|ws-by-page-host"
     $stampFile = Join-Path $frontend ".next\aegis-demo-host.txt"
     $current = if (Test-Path $stampFile) { (Get-Content $stampFile -Raw).Trim() } else { "" }
     if ($Rebuild -or $current -ne $stamp -or -not (Test-Path (Join-Path $frontend ".next\BUILD_ID"))) {
@@ -253,7 +276,20 @@ if (-not $NoDashboard) {
         foreach ($key in $dashEnv.Keys) { Set-Item -Path "env:$key" -Value $dashEnv[$key] }
         Push-Location $frontend
         try {
-            if (-not (Test-Path "node_modules")) { & cmd /c "npm install --no-audit --no-fund > `"$logDir\dashboard-install.log`" 2>&1" }
+            # Install when packages are missing or package.json / the lock file changed
+            # since the last install (a pull can add dependencies).
+            $installed = "node_modules\.package-lock.json"
+            $needInstall = -not (Test-Path $installed)
+            if (-not $needInstall) {
+                $at = (Get-Item $installed).LastWriteTimeUtc
+                foreach ($f in "package.json", "package-lock.json") {
+                    if ((Test-Path $f) -and (Get-Item $f).LastWriteTimeUtc -gt $at) { $needInstall = $true }
+                }
+            }
+            if ($needInstall) {
+                Say "Installing dashboard packages..."
+                & cmd /c "npm install --no-audit --no-fund > `"$logDir\dashboard-install.log`" 2>&1"
+            }
             & cmd /c "npm run build > `"$logDir\dashboard-build.log`" 2>&1"
             if ($LASTEXITCODE -ne 0) { Say "ERROR: dashboard build failed. See $logDir\dashboard-build.log" "Red" }
             else { Set-Content -Path $stampFile -Value $stamp -Encoding utf8 }
