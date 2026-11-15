@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { voiceApi, VoiceServiceError, type VoiceTurnResponse } from "@/lib/voiceApi";
 import { Badge } from "./ui";
 
@@ -42,6 +42,24 @@ function pickSupportedAudioMime(): string {
  */
 export function VoiceAssistantPanel({ scenarioId }: { scenarioId: string }) {
   const [expanded, setExpanded] = useState(false);
+  // The right column has a fixed height: the open panel floats over Comms instead of pushing
+  // Comms' controls off-screen, sized to the space left in the column.
+  const sectionRef = useRef<HTMLElement>(null);
+  const [sheetMax, setSheetMax] = useState(250);
+  useLayoutEffect(() => {
+    if (!expanded) return;
+    const fit = () => {
+      const el = sectionRef.current;
+      const col = el?.parentElement;
+      if (!el || !col) return;
+      const room = col.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom - 6;
+      // At least enough for the chips, input and newest answer on short laptop screens.
+      setSheetMax(Math.max(260, Math.round(room)));
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [expanded]);
   const [uiState, setUiState] = useState<UiState>("idle");
   const [serviceMode, setServiceMode] = useState<"full_speech" | "text_only" | "offline">("offline");
   const [muted, setMuted] = useState(false);
@@ -291,7 +309,8 @@ export function VoiceAssistantPanel({ scenarioId }: { scenarioId: string }) {
 
   return (
     <section
-      className="panel flex shrink-0 flex-col overflow-hidden"
+      ref={sectionRef}
+      className="panel relative flex shrink-0 flex-col border-l-2 border-l-accent"
       aria-label="Ask AEGIS read-only voice assistant"
       data-testid="ask-aegis-panel"
     >
@@ -387,7 +406,19 @@ export function VoiceAssistantPanel({ scenarioId }: { scenarioId: string }) {
 
       {/* Expandable body */}
       {expanded && (
-        <div className="scrollbar-thin flex max-h-[250px] flex-col gap-1.5 overflow-y-auto p-2">
+        <div
+          data-testid="ask-aegis-sheet"
+          role="region"
+          aria-label="Ask AEGIS conversation"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setExpanded(false);
+            }
+          }}
+          style={{ maxHeight: sheetMax }}
+          className="scrollbar-thin absolute inset-x-0 top-full z-20 mt-1 flex flex-col gap-1.5 overflow-y-auto rounded border border-accent/50 bg-panel p-2 shadow-lg"
+        >
           {banner && (
             <div
               role="status"
