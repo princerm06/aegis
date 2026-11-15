@@ -212,6 +212,23 @@ Test a recording: `python -m cv.tools.signs_report --source walk.mp4 --moving-ca
 
 ### Live demo and the dashboard camera tile
 
+One command starts the mounted C922 and, if the iPhone is connected, the body
+cam, each sending signs to the backend and serving its own dashboard tile:
+
+```sh
+python -m cv.demo                  # both cameras, everyone reported in room-2
+python -m cv.demo --room room-1    # another room; --no-bodycam for the C922 only
+```
+
+It prints the link for each tile: **BUILDING CAM** `http://127.0.0.1:8090/stream.mjpg`
+and **ALPHA · BODYCAM** `http://127.0.0.1:8091/stream.mjpg`. Paste them once in
+the tile's source field; the browser remembers them. Ctrl+C stops both cameras.
+Checked live on Nov 14: both tiles showed their camera and both cameras'
+detections reached the backend. A person seen by both cameras shows as two
+detections; link the fixed camera's one, since a casualty takes one track.
+
+The rest of this section is what `cv.demo` runs for the fixed camera.
+
 `cv/config/demo.yaml` is `rooms.yaml` for the mounted C922 (2–2.5 m high,
 angled about 45° down, not straight down) with signs on, 1080p capture, and
 unseen tracks kept for 5 minutes instead of 30 s. The backend links each
@@ -682,7 +699,7 @@ are not accuracy figures. Mapping error comes from the staged scenario runs.
 python -m pytest cv/tests
 ```
 
-208 tests. The suite covers:
+212 tests. The suite covers:
 
 - Homography math: exact recovery, reprojection error, horizon, degenerate
   points, rescaling.
