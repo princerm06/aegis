@@ -2,7 +2,8 @@
 # directory (cv/config/). Unknown keys are rejected.
 
 camera:
-  index: 0                  # Logitech is not always 0 on macOS; try 1 or 2
+  name: C922                 # found by name each time it opens; index is the fallback off macOS
+  index: 0                  # list with: python -m cv.main --list-cameras (not ffmpeg: its order differs)
   width: 1280
   height: 720
   fps: 30
@@ -33,7 +34,8 @@ tracking:
   lying_max_torso_m: 0.75   # shoulder-hip distance on the floor plane below this = lying
   reattach: true            # a new tracker ID near an occluded track resumes that track
   reattach_radius_m: 0.6
-  reattach_radius_frac: 0.08  # zones mode: same, as a fraction of the frame diagonal
+  reattach_radius_frac: 0.08  # uncalibrated: same, as a fraction of the frame diagonal
+  reattach_body_frac: 0.6     # uncalibrated: or this share of the person's box, if larger (a fall)
   zone_switch_frames: 5       # zones mode: frames in a new zone before switching
 
 # Observed signs (cv/signs/): observations with confidence and not_testable,

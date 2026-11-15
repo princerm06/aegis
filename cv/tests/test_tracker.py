@@ -79,6 +79,17 @@ def test_new_tracker_id_far_away_is_a_new_track():
     assert sorted(t.track_id for t in result) == ["s1-t1", "s1-t2"]
 
 
+def test_without_calibration_a_fall_with_a_new_tracker_id_stays_the_same_person():
+    tracks = TrackManager(SETTINGS, "s1")
+    tracks.update([det(1, standing_box(200, 400))], t=0.0)
+    tracks.update([], t=0.3)
+    tracks.update([det(5, (130, 365, 270, 400))], t=0.5)    # lying where they stood, new raw ID
+    assert list(tracks.tracks) == ["s1-t1"] and tracks.tracks["s1-t1"].reattached == 1
+    tracks.update([], t=0.8)
+    tracks.update([det(6, standing_box(600, 400))], t=1.0)  # someone else across the room
+    assert sorted(tracks.tracks) == ["s1-t1", "s1-t2"]
+
+
 def test_reattach_can_be_disabled():
     tracks = manager(reattach=False)
     tracks.update([det(1, standing_box(120, 220))], t=0.0)

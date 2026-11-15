@@ -15,8 +15,10 @@ Behaviour:
   so an old observation is never sent after a newer one (the backend rejects that).
 - Unchanged tracks are re-sent every ``heartbeat_s``; changes go out on the next tick.
 - ``send_signs`` adds the ``signs`` object (cv/CONTRACT_PROPOSAL.md) to visible
-  reports; a change of a sign's value counts as a change. Off by default: the
-  current backend rejects unknown fields.
+  reports; a change of a sign's value counts as a change. ``send_history``
+  (on by default) also sends the history and position signs (``HISTORY_SIGNS``),
+  accepted since backend PR #12. ``DISPLAY_ONLY_SIGNS`` (the pulse estimate)
+  are never sent.
 - Occluded/lost reports repeat the position, confidence and ``last_seen_at`` of
   the last report the backend *accepted* for that track, as the contract
   requires. Tracks the backend never accepted get no occluded/lost report.
@@ -43,6 +45,8 @@ from cv.zones import ZoneMap
 
 log = logging.getLogger(__name__)
 MIN_CONFIDENCE_BUCKET = 0.5  # backend treats crossing this as an impactful change
+HISTORY_SIGNS = ("fall", "walking", "limbs", "waving", "blood_spread", "changes", "face_down", "person_nearby")
+DISPLAY_ONLY_SIGNS = ("pulse",)        # in no contract: never sent
 
 
 class TransportError(Exception):
@@ -190,12 +194,19 @@ class Publisher:
             self._wake.set()
         return queued
 
+    def _wire_signs(self, signs: dict) -> dict:
+        dropped = DISPLAY_ONLY_SIGNS if self.settings.send_history else HISTORY_SIGNS + DISPLAY_ONLY_SIGNS
+        return {name: sign for name, sign in signs.items() if name not in dropped}
+
     def _signs_key(self, report: TrackReport) -> tuple:
         """Sign values (not confidences or timers): a change goes out on the next tick."""
         if not self.settings.send_signs or not report.signs:
             return ()
-        return tuple(sorted((name, sign.get("value")) for name, sign in report.signs.items()
-                            if isinstance(sign, dict)))
+        signs = self._wire_signs(report.signs)
+        values = [(name, sign.get("value")) for name, sign in signs.items() if isinstance(sign, dict)]
+        if signs.get("changes"):
+            values.append(("changes", signs["changes"][-1]["at"]))
+        return tuple(sorted(values))
 
     # ------------------------------------------------------------- payloads
     def build_body(self, outgoing: _Outgoing) -> dict | None:
@@ -227,7 +238,7 @@ class Publisher:
         common = {"id": observation_id, "observed_at": timebase.iso(report.observed_t),
                   "confidence": source.confidence, "track": track, **location}
         if self.settings.send_signs and report.state == "visible" and report.signs:
-            common["signs"] = report.signs
+            common["signs"] = self._wire_signs(report.signs)
         if self.settings.endpoint == "camera":
             return {"mode": "simulation", **common}
         return {"source": "cv", "kind": "person_detected", **common}

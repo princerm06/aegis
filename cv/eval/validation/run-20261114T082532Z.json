@@ -1,0 +1,252 @@
+{
+  "run_at_utc": "2026-11-14T08:25:32.293Z",
+  "clips": [
+    {
+      "name": "car-crash-head-blood",
+      "origin": "benchmark",
+      "source": "mixkit-blood-car-crash.mp4",
+      "duration_s": 37.3,
+      "people": 4,
+      "checks": [
+        {
+          "check": "blood on head",
+          "samples": 134,
+          "testable": 0.99,
+          "score": 0.56,
+          "regions_seen": [
+            "head"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "roses-no-blood",
+      "origin": "benchmark",
+      "source": "pexels-woman-lying-floor.mp4",
+      "duration_s": 23.5,
+      "people": 3,
+      "checks": [
+        {
+          "check": "no false blood",
+          "samples": 82,
+          "testable": 0.91,
+          "score": 0.402,
+          "regions_seen": [
+            "right_arm"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "three-lying-no-blood",
+      "origin": "benchmark",
+      "source": "pexels-three-lying-overhead.mp4",
+      "duration_s": 19.8,
+      "people": 3,
+      "checks": [
+        {
+          "check": "no false blood",
+          "samples": 71,
+          "testable": 0.97,
+          "score": 1.0,
+          "regions_seen": []
+        }
+      ]
+    },
+    {
+      "name": "eyes-closed-man",
+      "origin": "benchmark",
+      "source": "pexels-man-eyes-closed-breathing.mp4",
+      "duration_s": 7.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "eyes closed",
+          "samples": 27,
+          "testable": 0.93,
+          "score": 0.926
+        }
+      ]
+    },
+    {
+      "name": "sleeping-man-eyes",
+      "origin": "benchmark",
+      "source": "pexels-man-sleeping-720.mp4",
+      "duration_s": 28.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "eyes closed",
+          "samples": 107,
+          "testable": 0.56,
+          "score": 0.486
+        }
+      ]
+    },
+    {
+      "name": "sleeping-woman-eyes",
+      "origin": "benchmark",
+      "source": "pexels-woman-sleeping-720.mp4",
+      "duration_s": 25.7,
+      "people": 3,
+      "checks": [
+        {
+          "check": "eyes closed",
+          "samples": 52,
+          "testable": 0.85,
+          "score": 0.846
+        }
+      ]
+    },
+    {
+      "name": "urfall-01-lying",
+      "origin": "benchmark",
+      "source": "fall-01-cam0.mp4",
+      "duration_s": 5.3,
+      "people": 7,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 56,
+          "testable": 0.95,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "urfall-02-lying",
+      "origin": "benchmark",
+      "source": "fall-02-cam0.mp4",
+      "duration_s": 3.7,
+      "people": 5,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 45,
+          "testable": 0.96,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "urfall-03-lying",
+      "origin": "benchmark",
+      "source": "fall-03-cam0.mp4",
+      "duration_s": 7.2,
+      "people": 5,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 54,
+          "testable": 0.96,
+          "score": 0.0
+        }
+      ]
+    },
+    {
+      "name": "urfall-04-lying",
+      "origin": "benchmark",
+      "source": "fall-04-cam0.mp4",
+      "duration_s": 3.2,
+      "people": 4,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 17,
+          "testable": 0.82,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "urfall-05-lying",
+      "origin": "benchmark",
+      "source": "fall-05-cam0.mp4",
+      "duration_s": 5.0,
+      "people": 5,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 47,
+          "testable": 0.98,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "urfall-06-lying",
+      "origin": "benchmark",
+      "source": "fall-06-cam0.mp4",
+      "duration_s": 3.3,
+      "people": 5,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 32,
+          "testable": 0.94,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "urfall-07-lying",
+      "origin": "benchmark",
+      "source": "fall-07-cam0.mp4",
+      "duration_s": 5.2,
+      "people": 2,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 31,
+          "testable": 1.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "urfall-08-lying",
+      "origin": "benchmark",
+      "source": "fall-08-cam0.mp4",
+      "duration_s": 3.0,
+      "people": 3,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 20,
+          "testable": 0.8,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "urfall-09-lying",
+      "origin": "benchmark",
+      "source": "fall-09-cam0.mp4",
+      "duration_s": 6.2,
+      "people": 7,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 58,
+          "testable": 0.98,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "urfall-10-lying",
+      "origin": "benchmark",
+      "source": "fall-10-cam0.mp4",
+      "duration_s": 4.3,
+      "people": 6,
+      "checks": [
+        {
+          "check": "posture reaches lying",
+          "samples": 39,
+          "testable": 0.85,
+          "score": 1.0
+        }
+      ]
+    }
+  ]
+}

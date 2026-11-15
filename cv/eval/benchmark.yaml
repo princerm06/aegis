@@ -1,0 +1,109 @@
+# Public clips and what each should show, scored by `python -m cv.tools.validate`.
+# Paths are relative to cv/recordings/ (git-ignored; see "Public datasets" in
+# cv/README.md for where each clip comes from). Missing clips are skipped.
+# Check kinds and scores: cv/tools/validate.py. end_s: null = to the end.
+
+clips:
+  - name: car-crash-head-blood
+    source: datasets/stock/mixkit-blood-car-crash.mp4
+    checks:
+      - {kind: region, sign: visible_blood, value: head}
+      - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
+
+  - name: roses-no-blood                     # red roses next to a woman lying on the floor
+    source: datasets/stock/pexels-woman-lying-floor.mp4
+    checks:
+      - {kind: no_blood, sign: visible_blood}
+      - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
+
+  - name: three-lying-no-blood
+    source: datasets/stock/pexels-three-lying-overhead.mp4
+    checks:
+      - {kind: absent, sign: person_nearby, value: seen}   # nobody upright next to them
+      - {kind: no_blood, sign: visible_blood}
+      - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
+
+  - name: eyes-closed-man
+    source: datasets/stock/pexels-man-eyes-closed-breathing.mp4
+    checks:
+      - {kind: value, sign: eyes, value: closed}
+      - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
+
+  - name: sleeping-man-eyes                  # handheld, slow pan
+    source: datasets/stock/pexels-man-sleeping-720.mp4
+    moving_camera: true
+    checks:
+      - {kind: value, sign: eyes, value: closed}
+      - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
+
+  - name: sleeping-woman-eyes
+    source: datasets/stock/pexels-woman-sleeping-720.mp4
+    checks:
+      - {kind: value, sign: eyes, value: closed}
+      - {kind: absent, sign: fall, value: seen}
+      - {kind: absent, sign: waving, value: seen}
+
+  - {name: urfall-01-lying, source: datasets/urfall/fall-01-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-02-lying, source: datasets/urfall/fall-02-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-03-lying, source: datasets/urfall/fall-03-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-04-lying, source: datasets/urfall/fall-04-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-05-lying, source: datasets/urfall/fall-05-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-06-lying, source: datasets/urfall/fall-06-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-07-lying, source: datasets/urfall/fall-07-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-08-lying, source: datasets/urfall/fall-08-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-09-lying, source: datasets/urfall/fall-09-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+  - {name: urfall-10-lying, source: datasets/urfall/fall-10-cam0.mp4, checks: [{kind: reaches, sign: posture, value: lying}, {kind: reaches, sign: fall, value: seen}]}
+
+  # --- Breathing on real people (no reference rates are published, so these
+  # test failure directions, not rate accuracy). Clips stay local, numbers only.
+  # MPSC-RR (CC BY 4.0, Hasan et al., CHASE 2025): close torso crops, 1-1.5 m.
+  # MPSC-RespView (CC BY-NC 4.0, Sakib & Roy, WACV 2027; non-commercial use,
+  # no attempts to identify anyone). Breathing throughout the lying clips; the
+  # outdoor clips are about 20 s normal, 20 s held, 20 s forced (approximate).
+
+  - {name: mpsc-rr-s1-lying, source: datasets/mpsc-rr/s1_lying.mov, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: mpsc-rr-s2-lying, source: datasets/mpsc-rr/s2_lying.mov, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: mpsc-rr-s3-lying, source: datasets/mpsc-rr/s3_lying.mov, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: mpsc-rr-s5-lying, source: datasets/mpsc-rr/s5_lying.mov, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: mpsc-rr-s24-lying, source: datasets/mpsc-rr/s24_lying.mov, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-01-lying, source: datasets/mpsc-respview/indoor/sub_01/sub_01_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-02-lying, source: datasets/mpsc-respview/indoor/sub_02/sub_02_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-03-lying, source: datasets/mpsc-respview/indoor/sub_03/sub_03_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-04-lying, source: datasets/mpsc-respview/indoor/sub_04/sub_04_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-05-lying, source: datasets/mpsc-respview/indoor/sub_05/sub_05_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-06-lying, source: datasets/mpsc-respview/indoor/sub_06/sub_06_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-07-lying, source: datasets/mpsc-respview/indoor/sub_07/sub_07_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-08-lying, source: datasets/mpsc-respview/indoor/sub_08/sub_08_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-09-lying, source: datasets/mpsc-respview/indoor/sub_09/sub_09_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-10-lying, source: datasets/mpsc-respview/indoor/sub_10/sub_10_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-11-lying, source: datasets/mpsc-respview/indoor/sub_11/sub_11_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-12-lying, source: datasets/mpsc-respview/indoor/sub_12/sub_12_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-sub-13-lying, source: datasets/mpsc-respview/indoor/sub_13/sub_13_lying.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 20}, {kind: absent, sign: breathing, value: no_motion_detected, start_s: 20}]}
+  - {name: respview-out-01-04m, source: datasets/mpsc-respview/outdoor/out_01/out_01_04m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-01-05m, source: datasets/mpsc-respview/outdoor/out_01/out_01_05m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-01-06m, source: datasets/mpsc-respview/outdoor/out_01/out_01_06m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-01-07m, source: datasets/mpsc-respview/outdoor/out_01/out_01_07m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-01-11m, source: datasets/mpsc-respview/outdoor/out_01/out_01_11m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-02-04m, source: datasets/mpsc-respview/outdoor/out_02/out_02_04m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-02-06m, source: datasets/mpsc-respview/outdoor/out_02/out_02_06m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-02-07m, source: datasets/mpsc-respview/outdoor/out_02/out_02_07m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-02-09m, source: datasets/mpsc-respview/outdoor/out_02/out_02_09m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-03-04m, source: datasets/mpsc-respview/outdoor/out_03/out_03_04m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-03-05m, source: datasets/mpsc-respview/outdoor/out_03/out_03_05m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-03-06m, source: datasets/mpsc-respview/outdoor/out_03/out_03_06m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-03-07m, source: datasets/mpsc-respview/outdoor/out_03/out_03_07m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-03-09m, source: datasets/mpsc-respview/outdoor/out_03/out_03_09m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-03-11m, source: datasets/mpsc-respview/outdoor/out_03/out_03_11m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-03-13m, source: datasets/mpsc-respview/outdoor/out_03/out_03_13m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-04-04m, source: datasets/mpsc-respview/outdoor/out_04/out_04_04m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-04-05m, source: datasets/mpsc-respview/outdoor/out_04/out_04_05m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-04-06m, source: datasets/mpsc-respview/outdoor/out_04/out_04_06m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-04-07m, source: datasets/mpsc-respview/outdoor/out_04/out_04_07m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-04-09m, source: datasets/mpsc-respview/outdoor/out_04/out_04_09m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-04-13m, source: datasets/mpsc-respview/outdoor/out_04/out_04_13m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}
+  - {name: respview-out-05-05m, source: datasets/mpsc-respview/outdoor/out_05/out_05_05m.mp4, checks: [{kind: value, sign: breathing, value: motion_detected, start_s: 10, end_s: 20}, {kind: no_rate, sign: breathing, start_s: 34, end_s: 40}]}

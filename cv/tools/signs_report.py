@@ -24,7 +24,7 @@ import logging
 import sys
 import time
 from collections import Counter
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
@@ -106,35 +106,48 @@ def summarize(samples: list[tuple[float, dict]], expected: dict[str, str]) -> di
     return result
 
 
-def run(args: argparse.Namespace) -> dict:
+@dataclass
+class Collected:
+    samples: dict[str, list[tuple[float, dict]]]   # track_id -> (clip time, signs snapshot)
+    seen_s: Counter                                 # track_id -> seconds detected
+    frames: int
+    fps: float
+    size: tuple[int, int]
+    processing_s: float
+    eye_model_available: bool
+
+
+def collect(source: str, settings, *, step: float = 1.0, start: float = 0.0, max_s: float = 0.0,
+            command_at: Sequence[float] = (), moving_camera: bool = False,
+            save_video: str | None = None) -> Collected:
+    """Run detector, tracker and signs on every frame of a clip, timed by the clip."""
     import cv2
 
     from cv.clock import Timebase
     from cv.detector import Detector
-    from cv.monitor import CalloutLayout, build_scene, render
+    from cv.monitor import CalloutLayout, LastSeen, build_scene, render
     from cv.signs import SignsEstimator
     from cv.tracker import TrackManager
 
-    expected = parse_expect(args.expect)
-    settings = load_settings(args.config)
     settings = replace(settings, signs=replace(settings.signs, enabled=True,
-                                               moving_camera=settings.signs.moving_camera or args.moving_camera))
-    capture = cv2.VideoCapture(args.source)
+                                               moving_camera=settings.signs.moving_camera or moving_camera))
+    capture = cv2.VideoCapture(source)
     if not capture.isOpened():
-        raise FileNotFoundError(f"Cannot open {args.source}")
+        raise FileNotFoundError(f"Cannot open {source}")
     fps = float(capture.get(cv2.CAP_PROP_FPS) or 30.0)
     if fps <= 1 or fps > 240:
         fps = 30.0
     width, height = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    if args.start:
-        capture.set(cv2.CAP_PROP_POS_MSEC, args.start * 1000.0)
+    if start:
+        capture.set(cv2.CAP_PROP_POS_MSEC, start * 1000.0)
     detector = Detector(settings.detector)
     detector.warmup(width or settings.camera.width, height or settings.camera.height)
     tracker = TrackManager(settings.tracking, "clip")
     timebase = Timebase(monotonic=lambda: 0.0, wall=lambda: datetime(2000, 1, 1, tzinfo=timezone.utc))
     signs = SignsEstimator(settings.signs, timebase.iso, settings.tracking.keypoint_min_conf)
-    writer, layout = None, CalloutLayout()
-    commands = sorted(args.command_at)
+    signs.prepare()
+    writer, layout, last_seen = None, CalloutLayout(), LastSeen()
+    commands = sorted(command_at)
     samples: dict[str, list[tuple[float, dict]]] = {}
     seen_s: Counter = Counter()
     next_sample: dict[str, float] = {}
@@ -144,8 +157,8 @@ def run(args: argparse.Namespace) -> dict:
         ok, image = capture.read()
         if not ok:
             break
-        t = args.start + index / fps
-        if args.max_s and t - args.start > args.max_s:
+        t = start + index / fps
+        if max_s and t - start > max_s:
             break
         while commands and commands[0] <= t:
             signs.mark_command(commands.pop(0))
@@ -157,13 +170,13 @@ def run(args: argparse.Namespace) -> dict:
                 continue
             seen_s[track.track_id] += 1.0 / fps
             if t >= next_sample.get(track.track_id, 0.0):
-                next_sample[track.track_id] = t + args.step
+                next_sample[track.track_id] = t + step
                 samples.setdefault(track.track_id, []).append((t, signs.snapshot(track, t)))
-        if args.save_video:
-            canvas = render(image, tracks, build_scene(tracks, signs, t), layout, [f"t = {t:.1f} s"],
+        if save_video:
+            canvas = render(image, tracks, build_scene(tracks, signs, t, last_seen), layout, [f"t = {t:.1f} s"],
                             keypoint_min_conf=settings.tracking.keypoint_min_conf)
             if writer is None:
-                writer = cv2.VideoWriter(args.save_video, cv2.VideoWriter_fourcc(*"mp4v"), fps,
+                writer = cv2.VideoWriter(save_video, cv2.VideoWriter_fourcc(*"mp4v"), fps,
                                          (canvas.shape[1], canvas.shape[0]))
             writer.write(canvas)
         index += 1
@@ -171,27 +184,34 @@ def run(args: argparse.Namespace) -> dict:
     if writer is not None:
         writer.release()
     if not index:
-        raise ValueError(f"No frames read from {args.source}")
-    processing_s = time.perf_counter() - started
-    kept = [tid for tid, s in seen_s.most_common() if s >= args.min_seen_s and samples.get(tid)]
-    tracks_out = {tid.split("-")[-1]: {"seen_s": round(seen_s[tid], 1), **summarize(samples[tid], expected)}
+        raise ValueError(f"No frames read from {source}")
+    return Collected(samples, seen_s, index, fps, (width, height), time.perf_counter() - started,
+                     signs.eyes.scorer.available)
+
+
+def run(args: argparse.Namespace) -> dict:
+    expected = parse_expect(args.expect)
+    got = collect(args.source, load_settings(args.config), step=args.step, start=args.start, max_s=args.max_s,
+                  command_at=args.command_at, moving_camera=args.moving_camera, save_video=args.save_video)
+    kept = [tid for tid, s in got.seen_s.most_common() if s >= args.min_seen_s and got.samples.get(tid)]
+    tracks_out = {tid.split("-")[-1]: {"seen_s": round(got.seen_s[tid], 1), **summarize(got.samples[tid], expected)}
                   for tid in kept}
     main_track = kept[0].split("-")[-1] if kept else None
     return {
         "run_at_utc": iso_utc(datetime.now(timezone.utc)),
         "label": args.label or Path(args.source).stem,
         "source": Path(args.source).name,
-        "frames": index,
-        "duration_s": round(index / fps, 1),
-        "fps": round(fps, 2),
-        "size": [width, height],
+        "frames": got.frames,
+        "duration_s": round(got.frames / got.fps, 1),
+        "fps": round(got.fps, 2),
+        "size": list(got.size),
         "commands_at_s": sorted(args.command_at),
         "expected": expected,
         "main_track": main_track,
         "tracks": tracks_out,
-        "tracks_ignored": len(seen_s) - len(kept),
-        "eye_model_available": signs.eyes.scorer.available,
-        "processing_fps": round(index / processing_s, 1) if processing_s > 0 else None,
+        "tracks_ignored": len(got.seen_s) - len(kept),
+        "eye_model_available": got.eye_model_available,
+        "processing_fps": round(got.frames / got.processing_s, 1) if got.processing_s > 0 else None,
     }
 
 

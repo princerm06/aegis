@@ -1,0 +1,361 @@
+{
+  "run_at_utc": "2026-11-14T23:34:44.035Z",
+  "clips": [
+    {
+      "name": "demo-two-20261114T213918Z",
+      "origin": "take demo-two",
+      "source": "demo-two-20261114T213918Z.mp4",
+      "duration_s": 61.0,
+      "people": 2,
+      "checks": [
+        {
+          "check": "response reaches responded at 22-36 s",
+          "samples": 104,
+          "testable": 0.73,
+          "score": 1.0
+        },
+        {
+          "check": "response reaches no_response from 29 s",
+          "samples": 234,
+          "testable": 1.0,
+          "score": 1.0
+        },
+        {
+          "check": "waving reaches seen from 42 s",
+          "samples": 138,
+          "testable": 1.0,
+          "score": 1.0
+        },
+        {
+          "check": "person_nearby never seen",
+          "samples": 224,
+          "testable": 0.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "eyes-open-closed-20261114T175138Z",
+      "origin": "take eyes-open-closed",
+      "source": "eyes-open-closed-20261114T175138Z.mp4",
+      "duration_s": 41.4,
+      "people": 2,
+      "checks": [
+        {
+          "check": "eyes open at 5-20 s",
+          "samples": 57,
+          "testable": 0.51,
+          "score": 0.368,
+          "previous": 0.0,
+          "regressed": false
+        },
+        {
+          "check": "eyes closed from 27 s",
+          "samples": 54,
+          "testable": 0.0,
+          "score": 0.0,
+          "previous": 0.278,
+          "regressed": true
+        }
+      ]
+    },
+    {
+      "name": "eyes-open-closed-20261114T214633Z",
+      "origin": "take eyes-open-closed",
+      "source": "eyes-open-closed-20261114T214633Z.mp4",
+      "duration_s": 44.4,
+      "people": 2,
+      "checks": [
+        {
+          "check": "eyes open at 5-20 s",
+          "samples": 57,
+          "testable": 0.47,
+          "score": 0.474
+        },
+        {
+          "check": "eyes closed from 27 s",
+          "samples": 65,
+          "testable": 0.0,
+          "score": 0.0
+        }
+      ]
+    },
+    {
+      "name": "face-down-20261114T175424Z",
+      "origin": "take face-down",
+      "source": "face-down-20261114T175424Z.mp4",
+      "duration_s": 44.1,
+      "people": 2,
+      "checks": [
+        {
+          "check": "face_down seen at 8-24 s",
+          "samples": 60,
+          "testable": 0.92,
+          "score": 0.0,
+          "previous": 0.0,
+          "regressed": false
+        },
+        {
+          "check": "face_down never seen from 32 s",
+          "samples": 46,
+          "testable": 1.0,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "fall-to-mat-20261114T174912Z",
+      "origin": "take fall-to-mat",
+      "source": "fall-to-mat-20261114T174912Z.mp4",
+      "duration_s": 34.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "fall seen from 22 s",
+          "samples": 46,
+          "testable": 1.0,
+          "score": 0.0,
+          "previous": 0.0,
+          "regressed": false
+        },
+        {
+          "check": "fall never seen at 0-14 s",
+          "samples": 53,
+          "testable": 1.0,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "fall-to-mat-20261114T175000Z",
+      "origin": "take fall-to-mat",
+      "source": "fall-to-mat-20261114T175000Z.mp4",
+      "duration_s": 34.0,
+      "people": 1,
+      "checks": [
+        {
+          "check": "fall seen from 22 s",
+          "samples": 45,
+          "testable": 1.0,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        },
+        {
+          "check": "fall never seen at 0-14 s",
+          "samples": 54,
+          "testable": 1.0,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "helper-kneels-20261114T214521Z",
+      "origin": "take helper-kneels",
+      "source": "helper-kneels-20261114T214521Z.mp4",
+      "duration_s": 39.1,
+      "people": 3,
+      "checks": [
+        {
+          "check": "person_nearby seen from 25 s",
+          "samples": 53,
+          "testable": 1.0,
+          "score": 1.0
+        },
+        {
+          "check": "person_nearby never seen at 0-14 s",
+          "samples": 54,
+          "testable": 1.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "lie-down-slowly-20261114T174818Z",
+      "origin": "take lie-down-slowly",
+      "source": "lie-down-slowly-20261114T174818Z.mp4",
+      "duration_s": 39.3,
+      "people": 2,
+      "checks": [
+        {
+          "check": "fall never seen",
+          "samples": 149,
+          "testable": 1.0,
+          "score": 0.47,
+          "previous": 0.47,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "pulse-check-20261114T214816Z",
+      "origin": "take pulse-check",
+      "source": "pulse-check-20261114T214816Z.mp4",
+      "duration_s": 49.3,
+      "people": 2,
+      "checks": [
+        {
+          "check": "pulse reaches estimated from 15 s",
+          "samples": 140,
+          "testable": 0.0,
+          "score": 0.0
+        }
+      ]
+    },
+    {
+      "name": "response-no-20261114T175330Z",
+      "origin": "take response-no",
+      "source": "response-no-20261114T175330Z.mp4",
+      "duration_s": 39.3,
+      "people": 2,
+      "checks": [
+        {
+          "check": "response no_response from 29 s",
+          "samples": 39,
+          "testable": 1.0,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "response-yes-20261114T175236Z",
+      "origin": "take response-yes",
+      "source": "response-yes-20261114T175236Z.mp4",
+      "duration_s": 39.2,
+      "people": 2,
+      "checks": [
+        {
+          "check": "response responded at 22-36 s",
+          "samples": 53,
+          "testable": 1.0,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "side-facing-away-20261114T175523Z",
+      "origin": "take side-facing-away",
+      "source": "side-facing-away-20261114T175523Z.mp4",
+      "duration_s": 30.1,
+      "people": 4,
+      "checks": [
+        {
+          "check": "face_down never seen",
+          "samples": 108,
+          "testable": 0.38,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "walk-20261114T174651Z",
+      "origin": "take walk",
+      "source": "walk-20261114T174651Z.mp4",
+      "duration_s": 29.4,
+      "people": 1,
+      "checks": [
+        {
+          "check": "walking seen from 16 s",
+          "samples": 51,
+          "testable": 1.0,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        },
+        {
+          "check": "walking never seen at 0-7 s",
+          "samples": 27,
+          "testable": 0.41,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        },
+        {
+          "check": "waving never seen",
+          "samples": 112,
+          "testable": 0.89,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "walk-past-20261114T214419Z",
+      "origin": "take walk-past",
+      "source": "walk-past-20261114T214419Z.mp4",
+      "duration_s": 29.4,
+      "people": 4,
+      "checks": [
+        {
+          "check": "person_nearby never seen",
+          "samples": 63,
+          "testable": 1.0,
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "name": "wave-20261114T174735Z",
+      "origin": "take wave",
+      "source": "wave-20261114T174735Z.mp4",
+      "duration_s": 29.6,
+      "people": 1,
+      "checks": [
+        {
+          "check": "waving seen from 18 s",
+          "samples": 42,
+          "testable": 1.0,
+          "score": 0.0,
+          "previous": 0.0,
+          "regressed": false
+        },
+        {
+          "check": "waving never seen at 0-11 s",
+          "samples": 40,
+          "testable": 0.72,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    },
+    {
+      "name": "wave-lying-20261114T175049Z",
+      "origin": "take wave-lying",
+      "source": "wave-lying-20261114T175049Z.mp4",
+      "duration_s": 34.2,
+      "people": 3,
+      "checks": [
+        {
+          "check": "waving seen from 21 s",
+          "samples": 50,
+          "testable": 1.0,
+          "score": 0.0,
+          "previous": 0.0,
+          "regressed": false
+        },
+        {
+          "check": "waving never seen at 0-14 s",
+          "samples": 54,
+          "testable": 0.78,
+          "score": 1.0,
+          "previous": 1.0,
+          "regressed": false
+        }
+      ]
+    }
+  ]
+}

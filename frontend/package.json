@@ -9,7 +9,7 @@
     "lint": "next lint",
     "smoke": "node scripts/smoke.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test scripts/test-route-invalidation.mjs",
+    "test": "node --test scripts/test-route-invalidation.mjs scripts/test-push-to-talk.mjs",
     "e2e": "node scripts/e2e.mjs"
   },
   "dependencies": {

@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 import numpy as np
 import pytest
-import torch
+torch = pytest.importorskip("torch", reason="Optional PyTorch dependency required for neural assignment experiments")
 
 from neural_assignment import FEATURE_SCHEMA_VERSION, GENERATOR_VERSION
 from neural_assignment._rootpath import ensure_repo_root_on_path

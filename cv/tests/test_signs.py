@@ -282,7 +282,9 @@ def test_snapshot_has_every_sign_and_no_clinical_fields():
     signs = estimator.snapshot(track, 6.0)
     assert signs["schema"] == SCHEMA
     assert set(signs) == {"schema", "window_s", "posture", "movement", "response", "eyes",
-                          "breathing", "visible_blood"}
+                          "breathing", "visible_blood", "fall", "walking", "limbs", "waving", "face_down",
+                          "person_nearby", "blood_spread", "changes", "pulse"}
+    assert signs["fall"]["value"] == "not_seen" and signs["walking"]["value"] == "not_seen"
     assert signs["posture"] == {"value": "lying", "confidence": 0.82}
     assert signs["movement"]["value"] == "still"
     assert signs["response"]["command_at"].startswith("2026-11-14T05:00:06")
@@ -299,11 +301,12 @@ def test_tracks_that_leave_are_forgotten():
     assert estimator.states == {}
 
 
-def signs_publisher(send_signs):
+def signs_publisher(send_signs, send_history=False):
     clock = FakeClock()
     timebase = Timebase(monotonic=clock, wall=lambda: datetime(2026, 11, 14, 5, 0, tzinfo=timezone.utc))
     transport = FakeTransport()
-    publisher = Publisher(PublisherSettings(send_signs=send_signs), frame_id="demo-floor-1",
+    publisher = Publisher(PublisherSettings(send_signs=send_signs, send_history=send_history),
+                          frame_id="demo-floor-1",
                           calibration_ref="cv-demo-floor-1-abc", session_id="s1", timebase=timebase,
                           transport=transport, clock=clock)
     return publisher, transport, clock
@@ -329,6 +332,19 @@ def test_signs_are_sent_only_when_enabled_and_visible():
     assert "signs" not in transport.posts()[0]
 
 
+def test_history_signs_stay_off_the_wire_until_the_backend_accepts_them():
+    history = {**SIGNS, "fall": {"value": "seen", "confidence": 0.8, "at": "2026-11-14T05:00:01.000Z"},
+               "changes": [{"sign": "eyes", "from": "open", "to": "closed", "at": "2026-11-14T05:00:02.000Z"}]}
+    publisher, transport, _ = signs_publisher(send_signs=True)
+    publisher.submit([replace(report(100.0), signs=history)])
+    publisher.step()
+    assert transport.posts()[0]["signs"] == SIGNS                  # the current backend rejects unknown keys
+    publisher, transport, _ = signs_publisher(send_signs=True, send_history=True)
+    publisher.submit([replace(report(100.0), signs=history)])
+    publisher.step()
+    assert transport.posts()[0]["signs"] == history
+
+
 def test_a_changed_sign_value_is_sent_before_the_heartbeat():
     publisher, _, clock = signs_publisher(send_signs=True)
     assert publisher.submit([replace(report(100.0), signs=SIGNS)]) == 1
@@ -337,3 +353,22 @@ def test_a_changed_sign_value_is_sent_before_the_heartbeat():
     assert publisher.submit([replace(report(100.2), signs=timer_only)]) == 0
     opened = {**SIGNS, "eyes": {"value": "open", "confidence": 0.7}}
     assert publisher.submit([replace(report(100.2), signs=opened)]) == 1
+
+
+def test_an_unreachable_eye_model_download_disables_eyes_instead_of_hanging(tmp_path, monkeypatch):
+    import urllib.request
+
+    from cv.signs.eyes import FaceScorer
+
+    calls = []
+
+    def offline(url, timeout=None):
+        calls.append(timeout)
+        raise TimeoutError("no internet on this hotspot")
+
+    monkeypatch.setattr(urllib.request, "urlopen", offline)
+    scorer = FaceScorer(tmp_path / "face_landmarker.task")
+    assert scorer.prepare() is False and not scorer.available
+    assert calls and calls[0] is not None                  # the download always has a timeout
+    assert scorer.closed_score(np.zeros((64, 64, 3), np.uint8)) is None
+    assert len(calls) == 1                                 # and is not retried on every frame

@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from cv.signs.body import region_masks
+from cv.signs.body import body_scale, region_masks
 
 
 def red_mask(image_bgr, settings) -> np.ndarray:
@@ -63,6 +63,7 @@ def region_fractions(image_bgr, bbox, keypoints, keypoint_conf, settings,
 @dataclass
 class BloodState:
     checks: deque = field(default_factory=deque)   # (t, {region: detected} or None)
+    amounts: deque = field(default_factory=deque)  # (t, red pixels on the body / body size squared)
     last_check_t: float = -1e9
 
 
@@ -86,8 +87,35 @@ class BloodEstimator:
             state.checks.append((t, {
                 name: share >= self._min_fraction(name) and pixels >= self.settings.blood_min_pixels
                 for name, (share, pixels) in fractions.items()}))
+            scale = body_scale(bbox, keypoints, keypoint_conf, self.min_conf)
+            state.amounts.append((t, sum(pixels for _, pixels in fractions.values()) / scale ** 2))
         while state.checks and t - state.checks[0][0] > self.settings.window_s:
             state.checks.popleft()
+        while state.amounts and t - state.amounts[0][0] > self.settings.blood_spread_window_s:
+            state.amounts.popleft()
+
+    def spread(self, state: BloodState, t: float, detected: bool) -> dict:
+        """Whether the visible red area on the body grew over the last ``blood_spread_window_s``:
+        the median of the last third against the first third. Only while blood is detected."""
+        settings = self.settings
+        window = settings.blood_spread_window_s
+        result = {"value": "not_testable", "confidence": 0.0, "window_s": window}
+        recent = [(ts, a) for ts, a in state.amounts if t - ts <= window]
+        if not detected or len(recent) < 12 or recent[-1][0] - recent[0][0] < 0.8 * window:
+            return result
+        span = recent[-1][0] - recent[0][0]
+        early = float(np.median([a for ts, a in recent if ts - recent[0][0] <= span / 3]))
+        late = float(np.median([a for ts, a in recent if recent[-1][0] - ts <= span / 3]))
+        if early <= 0:
+            return result
+        ratio = late / early
+        change = {"change_pct": round(100 * (ratio - 1))}
+        if ratio >= settings.blood_spread_ratio:
+            return {**result, "value": "growing", "confidence": round(min(0.8, 0.4 + 0.4 * (ratio - 1)), 2), **change}
+        if ratio <= 1 / settings.blood_spread_ratio:
+            return {**result, "value": "shrinking", "confidence": round(min(0.8, 0.4 + 0.4 * (1 / ratio - 1)), 2),
+                    **change}
+        return {**result, "value": "stable", "confidence": 0.5, **change}
 
     def value(self, state: BloodState, t: float) -> dict:
         recent = [c for ts, c in state.checks if t - ts <= self.settings.window_s and c is not None]

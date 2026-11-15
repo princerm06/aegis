@@ -12,6 +12,7 @@
 # The points are walkable cells of the demo map (cv/tests/test_rooms.py checks it).
 
 camera:
+  name: C922                # the Logitech; --camera <index or name> to use another
   index: 0
 
 mapping:
