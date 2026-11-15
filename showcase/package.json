@@ -1,0 +1,40 @@
+{
+  "name": "aegis-hackprinceton-showcase",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": "22.x" },
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1",
+    "build": "next build && npm run audit:output",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:browser": "node tests/browser.mjs",
+    "test:routes": "node --test tests/routes.mjs",
+    "audit:output": "node scripts/audit.mjs",
+    "serve": "node scripts/serve.mjs"
+  },
+  "dependencies": {
+    "framer-motion": "11.18.2",
+    "lucide-react": "0.468.0",
+    "next": "15.5.29",
+    "react": "19.2.9",
+    "react-dom": "19.2.9"
+  },
+  "overrides": {
+    "postcss": "8.5.33",
+    "@typescript-eslint/typescript-estree": { "minimatch": "11.0.8" }
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "4.1.11",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.29",
+    "puppeteer-core": "25.17.0",
+    "tailwindcss": "4.1.11",
+    "typescript": "^5"
+  }
+}

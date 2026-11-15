@@ -1,0 +1,50 @@
+# Complete showcase file inventory
+
+All listed files are new under `showcase/`; no operational files are part of this change.
+
+- `showcase/.gitignore`
+- `showcase/FILES.md`
+- `showcase/PROVENANCE.md`
+- `showcase/README.md`
+- `showcase/REGRESSION_RESULTS.md`
+- `showcase/VALIDATION.md`
+- `showcase/eslint.config.mjs`
+- `showcase/next.config.ts`
+- `showcase/package-lock.json`
+- `showcase/package.json`
+- `showcase/postcss.config.mjs`
+- `showcase/scripts/audit.mjs`
+- `showcase/scripts/serve.mjs`
+- `showcase/src/app/demo/page.tsx`
+- `showcase/src/app/globals.css`
+- `showcase/src/app/layout.tsx`
+- `showcase/src/app/page.tsx`
+- `showcase/src/components/landing/BackendStatus.tsx`
+- `showcase/src/components/landing/Closing.tsx`
+- `showcase/src/components/landing/DemoPreview.tsx`
+- `showcase/src/components/landing/FloatingSectionNavigation.tsx`
+- `showcase/src/components/landing/Hardware.tsx`
+- `showcase/src/components/landing/Hero.tsx`
+- `showcase/src/components/landing/HumanLoop.tsx`
+- `showcase/src/components/landing/InteractiveHeroScene.tsx`
+- `showcase/src/components/landing/Logo.tsx`
+- `showcase/src/components/landing/Nav.tsx`
+- `showcase/src/components/landing/Problem.tsx`
+- `showcase/src/components/landing/ScrollExperience.tsx`
+- `showcase/src/components/landing/Section.tsx`
+- `showcase/src/components/landing/TechnologyArchitecture.tsx`
+- `showcase/src/components/landing/Workflow3D.tsx`
+- `showcase/src/components/landing/motion.tsx`
+- `showcase/src/components/sandbox/Sandbox.tsx`
+- `showcase/src/components/sandbox/SandboxMap.tsx`
+- `showcase/src/components/sandbox/SandboxPreview.tsx`
+- `showcase/src/components/sandbox/SystemContext.tsx`
+- `showcase/src/components/theme.tsx`
+- `showcase/src/lib/sandbox/context.ts`
+- `showcase/src/lib/sandbox/engine.ts`
+- `showcase/tests/browser.mjs`
+- `showcase/tests/context.test.mjs`
+- `showcase/tests/engine.test.mjs`
+- `showcase/tests/routes.mjs`
+- `showcase/tsconfig.json`
+- `showcase/vercel.json`
