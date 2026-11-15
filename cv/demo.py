@@ -49,12 +49,14 @@ class Feed:
 
 # About 10 KB a frame: on the venue hotspot 640 px frames (22 KB) backed up at 5 fps.
 LAN_STREAM = ["--stream-fps", "10", "--stream-quality", "45", "--stream-width", "480"]
-TAILSCALE_STREAM = ["--stream-fps", "12", "--stream-quality", "75", "--stream-width", "960"]
+# Capped above the ~15 fps camera loop so every frame goes out (a 12-15 cap sent every other one, ~8 fps);
+# about 60 KB a frame, 7 Mbit/s. Full 1280 px was 10 Mbit/s for no visible gain in the tile.
+TAILSCALE_STREAM = ["--stream-fps", "30", "--stream-quality", "80", "--stream-width", "960"]
 TAILSCALE_NET = ipaddress.ip_network("100.64.0.0/10")
 
 
 def stream_preset(stream_host: str) -> list[str]:
-    """Stream settings for the network the tiles are served on: full on this Mac, sharper over Tailscale."""
+    """Stream settings for the network the tiles are served on: full on this Mac, sharp and smooth over Tailscale."""
     if stream_host == "127.0.0.1":
         return []
     try:
