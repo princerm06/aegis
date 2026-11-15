@@ -5,6 +5,30 @@ Validated locally on November 14, 2026, in the isolated
 
 ## Showcase validation
 
+### Intelligence-context enhancement
+
+Revalidated the showcase after adding full-system, camera, neural, research, and
+hardware context. **23 unit tests**, **4 route suites**, and **7 browser coverage
+groups** pass, including all original interactions. Lint, typecheck, static build,
+36-artifact isolation audit and npm audit (0 vulnerabilities) pass. Deployment
+configuration, dependencies/lockfile, landing, sandbox engine, and operational
+files are unchanged by this follow-up. No deployment or merge was performed.
+
+New coverage checks direct-entry introduction visibility at desktop 1440×900 and
+mobile 390×844/360×800, accessible native disclosure toggles, no overflow even
+with details expanded, synthetic/recorded distinction, exact research metrics and
+always-visible caveats, camera confirmation updates, reset, and no operational
+networking. The original approval, dispatch, route invalidation/replanning,
+receipt/ACK/DONE, independent sessions, and offline tests still pass.
+
+`PROVENANCE.md` documents source fields/hashes. A one-time read-only verification
+compared the curated constants against the repository CV/EMS JSON reports; neither
+the application, its build, nor tests require those operational report files.
+Historical operational-suite results below are retained, not represented as
+freshly rerun for this presentation-only update.
+
+### Initial showcase validation
+
 Node **22.23.5**, npm clean install from showcase's own lockfile:
 
 | Check | Result |
@@ -69,7 +93,8 @@ tab hit-testing. No claim of pixel-identical screenshots is made.
 - No source imports outside showcase; no shared package/workspace/root config.
 - Only public-safe presentational components and synthetic grid fixtures included.
 - No operational environment variables, checkpoints, credentials, private keys,
-  model predictions or operational static data intentionally included.
+  neural/XGBoost predictions or raw operational data intentionally included.
+  Curated recorded CV/aggregate EMS context is explicitly identified and sourced.
 - Build audit rejects common credential/config markers, operational paths,
   application networking/device APIs, unapproved imports, symlinks and unexpected
   output files. This is defense in depth, not a universal secret-detection proof.

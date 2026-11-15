@@ -27,8 +27,18 @@ No Real Emergency Dispatch**. Its fixtures are synthetic, not clinical guidance.
 with a lexicographic human-priority objective, then grid travel-distance tie
 breaking. Routes use breadth-first shortest paths on an unweighted synthetic grid.
 This is demonstration logic, **not live OR-Tools CP-SAT, operational A*, or neural
-inference**. No purported MLP/GNN/XGBoost predictions, scores, benchmarks, or
-precomputed model outputs are supplied.
+inference**. No MLP/GNN/XGBoost predictions or inference scores are supplied.
+
+The demo opens with the full-system distinction and an expandable eight-stage
+workflow. Synthetic camera cards show source identities, last-observed scenario
+offsets, visibility, observable signs and explicit human confirmation. A separate
+collapsed disclosure contains a verified recorded CV clip excerpt, never mapped
+to sandbox casualties or used as engine input. Neural context explains authority
+and advisory boundaries; the Research Intelligence panel reports verified aggregate
+NYC EMS XGBoost metrics with the severity-8 caveat. Hardware context distinguishes
+physical prototype devices from virtual controls. See `PROVENANCE.md` for exact
+source fields, hashes, synthetic/recorded boundaries, and limitations. No report
+or checkpoint outside showcase is loaded by its build or application.
 
 Only confirmed, assessed, reachable, unfinished casualties are eligible; responders
 must be available and not reserved by an active task. Assignments are distinct.
@@ -123,8 +133,9 @@ the repository; an owner must confirm those separately before authorizing releas
 ## Limits and evidence
 
 This is a fixed synthetic grid, not a live emergency system or geographic map.
-It has no continuous vehicle movement, clinical inference, recorded model outputs,
-live voice, or hardware connectivity. Reload intentionally resets the scenario.
+It has no continuous vehicle movement, clinical inference, neural/XGBoost predictions,
+live voice, or hardware connectivity. Recorded CV excerpts and aggregate EMS metrics
+are explanatory context only. Reload intentionally resets the scenario.
 The copied landing is preserved, not claimed pixel-identical: public CTAs/preview,
 honest static status, independent theme key, reduced-motion hydration and workflow
 hit-testing corrections are isolated intentional changes.

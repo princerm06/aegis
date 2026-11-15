@@ -4,6 +4,7 @@ All listed files are new under `showcase/`; no operational files are part of thi
 
 - `showcase/.gitignore`
 - `showcase/FILES.md`
+- `showcase/PROVENANCE.md`
 - `showcase/README.md`
 - `showcase/REGRESSION_RESULTS.md`
 - `showcase/VALIDATION.md`
@@ -37,9 +38,12 @@ All listed files are new under `showcase/`; no operational files are part of thi
 - `showcase/src/components/sandbox/Sandbox.tsx`
 - `showcase/src/components/sandbox/SandboxMap.tsx`
 - `showcase/src/components/sandbox/SandboxPreview.tsx`
+- `showcase/src/components/sandbox/SystemContext.tsx`
 - `showcase/src/components/theme.tsx`
+- `showcase/src/lib/sandbox/context.ts`
 - `showcase/src/lib/sandbox/engine.ts`
 - `showcase/tests/browser.mjs`
+- `showcase/tests/context.test.mjs`
 - `showcase/tests/engine.test.mjs`
 - `showcase/tests/routes.mjs`
 - `showcase/tsconfig.json`

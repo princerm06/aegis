@@ -55,6 +55,32 @@ const confirm = async (id, priority) => {
   await click(`confirm-${id}`);
   await selectPriority(id, priority);
 };
+const checkSystemContext = async (target) => {
+  const intro = await target.$eval(selector('system-context'), element => {
+    const rect = element.getBoundingClientRect();
+    return { text: element.innerText, top: rect.top, bottom: rect.bottom, height: innerHeight };
+  });
+  assert.match(intro.text, /computer vision, human assessments, mathematical optimization, neural intelligence, and physical responder hardware/);
+  assert.match(intro.text, /actual cameras, backend optimization, trained models, and connected Arduino/);
+  assert.match(intro.text, /isolated, browser-only/);
+  assert.ok(intro.top >= 0 && intro.bottom <= intro.height, 'system introduction visible on direct entry');
+  assert.equal(await target.$$eval('[data-testid^="observation-C"]', elements => elements.length), 4);
+  assert.match(await target.$eval(selector('camera-intelligence'), element => element.innerText), /SYNTHETIC FIXTURES/);
+  assert.match(await target.$eval(selector('observation-C2'), element => element.innerText), /Partially occluded[\s\S]*Not testable/);
+  for (const id of ['full-system-details', 'recorded-cv-details', 'neural-context', 'research-details']) {
+    const toggle = `${selector(id)} summary`;
+    await target.$eval(toggle, element => element.scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await target.click(toggle);
+    assert.equal(await target.$eval(selector(id), element => element.open), true);
+    assert.equal(await target.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await target.click(toggle);
+    assert.equal(await target.$eval(selector(id), element => element.open), false);
+  }
+  const research = await target.$eval(selector('research-intelligence'), element => element.innerText);
+  for (const value of ['377,606', '67,798', '78.39 seconds', '82.63 seconds']) assert.ok(research.includes(value));
+  assert.match(research, /incident creation to first assignment/);
+  assert.match(research, /rare severity-8[\s\S]*does not execute XGBoost/);
+};
 
 try {
   await hook(page);
@@ -109,10 +135,12 @@ try {
   assert.equal(new URL(page.url()).pathname, "/demo");
   assert.match(await page.$eval("body", (element) => element.innerText), /Interactive Simulation — No Real Emergency Dispatch/);
   assert.match(await page.$eval("body", (element) => element.innerText), /Not live OR-Tools/);
+  await checkSystemContext(page);
   assert.equal(await countTasks(), 0);
   await click("recommend");
   assert.equal(await disabled("approve"), true);
   await confirm("C1", "first");
+  assert.equal(await page.$eval(selector('observation-confirmation-C1'), element => element.innerText), 'Human-confirmed in sandbox');
   await confirm("C2", "next");
   await click("recommend");
   assert.equal(await disabled("dispatch"), true);
@@ -158,11 +186,18 @@ try {
   const otherPage = await otherContext.newPage();
   await hook(otherPage);
   await otherPage.goto(base + "/demo", { waitUntil: "networkidle0" });
+  await otherPage.setViewport({ width: 390, height: 844 });
+  await checkSystemContext(otherPage);
+  await otherPage.setViewport({ width: 360, height: 800 });
+  await otherPage.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await checkSystemContext(otherPage);
+  console.log('PASS system context: direct desktop/mobile entry, synthetic/recorded camera distinction, expandable architecture/neural/research context, verified EMS metrics, no overflow');
   assert.equal(await otherPage.$eval(selector("confirm-C1"), (element) => element.getAttribute("aria-pressed")), "false");
   assert.equal(await otherPage.$$eval('[data-testid^="history-"]', (elements) => elements.length), 0);
   await otherContext.close();
 
   await click("reset");
+  assert.equal(await page.$eval(selector('observation-confirmation-C1'), element => element.innerText), 'Awaiting explicit human confirmation');
   assert.equal(await countTasks(), 0);
   assert.equal(await page.$$eval('[data-testid^="history-"]', (elements) => elements.length), 0);
   assert.equal(await page.$eval(selector("priority-C1"), (element) => element.value), "unassessed");
