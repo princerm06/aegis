@@ -513,7 +513,13 @@ export function CommandCenter() {
         </div>
         <button onClick={() => { setEmsFocus(true); setDrawer(true); }} className="mono shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] text-accent hover:border-accent" title="Historical NYC EMS XGBoost research advisory (research only, no dispatch authority)" aria-label="Open historical NYC EMS XGBoost research advisory">EMS ML</button>
         <ThemeToggle compact className="shrink-0" />
-        <div className="sim-stripe mono shrink-0 rounded border border-warn/60 px-2 py-0.5 text-[10.5px] font-bold tracking-[0.16em] text-warn">SIMULATION</div>
+        <div
+          className="sim-stripe mono shrink-0 rounded border border-warn/60 px-2 py-0.5 text-[10.5px] font-bold tracking-[0.16em] text-warn"
+          title="Simulated incident. Nothing here reaches a real emergency service; a person approves every dispatch."
+          data-testid="simulation-badge"
+        >
+          TRAINING EXERCISE · SIM
+        </div>
         <button onClick={toggleMute} className="shrink-0 text-[13px]" title={muted ? "Alert sounds off" : "Alert sounds on"} aria-label="Toggle alert sound">
           {muted ? "🔕" : "🔔"}
         </button>

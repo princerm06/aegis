@@ -3,6 +3,7 @@
 import { useMemo, useRef } from "react";
 import { SEVERITY_META, ageSeconds, meters, shortId, trackLabel } from "@/lib/format";
 import { getInvalidatedAssignments, isRouteStale } from "@/lib/routeInvalidation";
+import { NO_OFFSET, spreadOffsets } from "@/lib/spread";
 import type { FloorOutline } from "@/lib/floorOutlines";
 import type { AStarRoute, AssignmentStatus, SimulationProposal, SimulationState } from "@/lib/types";
 
@@ -90,6 +91,27 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
   const proposed = showRouting && proposal && proposal.status !== "dispatched" ? proposal.assignments.filter((a) => vis(a.casualty_id)) : [];
   const resolved = new Set(state.resolved_casualty_ids);
   const trackByCasualty = new Map(state.tracks.filter((t) => t.casualty_id).map((t) => [t.casualty_id!, t]));
+
+  // Display only: fan out casualties and unlinked detections that share one point (a zone camera
+  // reports everyone at the room centre). Real positions are untouched; leader lines point back to them.
+  const spread = useMemo(() => {
+    const show = (id: string) => !visibleIds || visibleIds.has(id);
+    const px = (x: number) => x - bounds.x0;
+    const py = (y: number) => bounds.h - (y - bounds.y0);
+    const items = [
+      ...scene.casualties.filter((c) => show(c.id)).map((c) => ({ id: c.id, x: px(c.position.x_m), y: py(c.position.y_m) })),
+      ...state.tracks
+        .filter((t) => !t.casualty_id && show(t.track_id))
+        .map((t) => ({ id: t.track_id, x: px(t.latest_observation.position.x_m), y: py(t.latest_observation.position.y_m) })),
+    ];
+    const offsets = spreadOffsets(items);
+    const leaders = items.flatMap((i) => {
+      const o = offsets.get(i.id);
+      return o ? [{ id: i.id, x: i.x, y: i.y, dx: o.dx, dy: o.dy }] : [];
+    });
+    return { offsets, leaders };
+  }, [scene.casualties, state.tracks, visibleIds, bounds]);
+  const offsetOf = (id: string) => spread.offsets.get(id) ?? NO_OFFSET;
 
   // Fine grids (building walls at 0.25 m) are drawn as one path of blocked cells, not a rect per cell.
   const fine = !!grid && grid.width * grid.height > 2500;
@@ -399,14 +421,39 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
           ),
       )}
 
+      {/* leader lines from spread-out markers back to their real position (display only) */}
+      {spread.leaders.length > 0 && (
+        <g pointerEvents="none" data-spread-markers={spread.leaders.length}>
+          {spread.leaders.map((l) => (
+            <line
+              key={`lead-${l.id}`}
+              x1={l.x}
+              y1={l.y}
+              x2={l.x + l.dx}
+              y2={l.y + l.dy}
+              stroke="var(--faint)"
+              strokeWidth={0.04}
+              strokeDasharray="0.12 0.1"
+            />
+          ))}
+          {spread.leaders.map((l) => (
+            <circle key={`true-${l.id}`} cx={l.x} cy={l.y} r={0.12} fill="var(--faint)" />
+          ))}
+        </g>
+      )}
+
       {/* CV track boxes (labels render in a later pass, on top of markers) */}
       {state.tracks.filter((t) => vis(t.track_id)).map((t) => {
         const o = t.latest_observation;
         const stale = ageSeconds(o.observed_at, now) > STALE_S || (t.latest_observation.track?.state ?? "visible") !== "visible";
         const linked = !!t.casualty_id;
         const color = linked ? "var(--accent)" : "var(--warn)";
-        const x = X(o.position.x_m);
-        const y = Y(o.position.y_m);
+        const trueX = X(o.position.x_m);
+        const trueY = Y(o.position.y_m);
+        // A linked track's box follows its casualty marker; an unlinked one has its own slot.
+        const shift = offsetOf(t.casualty_id ?? t.track_id);
+        const x = trueX + shift.dx;
+        const y = trueY + shift.dy;
         const s = 0.9;
         return (
           <g
@@ -432,7 +479,7 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
               strokeDashoffset={0.25}
             />
             {t.camera?.location_basis === "zone_estimate" && (
-              <circle cx={x} cy={y} r={1.6} fill="none" stroke={color} strokeWidth={0.03} strokeDasharray="0.15 0.15" />
+              <circle cx={trueX} cy={trueY} r={1.6} fill="none" stroke={color} strokeWidth={0.03} strokeDasharray="0.15 0.15" />
             )}
           </g>
         );
@@ -442,8 +489,9 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
       {scene.casualties.filter((c) => vis(c.id)).map((c) => {
         const sev = c.medical_assessment?.severity ?? "unassessed";
         const meta = SEVERITY_META[sev];
-        const x = X(c.position.x_m);
-        const y = Y(c.position.y_m);
+        const shift = offsetOf(c.id);
+        const x = X(c.position.x_m) + shift.dx;
+        const y = Y(c.position.y_m) + shift.dy;
         const sel = selectedId === c.id;
         const done = resolved.has(c.id);
         const task = taskByCasualty.get(c.id);
@@ -498,8 +546,9 @@ export function SceneMap({ state, proposal, selectedId, onSelect, editMode, onTo
           if (t.casualty_id) return null;
           const o = t.latest_observation;
           const stale = ageSeconds(o.observed_at, now) > STALE_S || (o.track?.state ?? "visible") !== "visible";
-          const x = X(o.position.x_m);
-          const y = Y(o.position.y_m);
+          const shift = offsetOf(t.track_id);
+          const x = X(o.position.x_m) + shift.dx;
+          const y = Y(o.position.y_m) + shift.dy;
           const s = 0.9;
           const left = i % 2 === 1;
           const belowBox = y < 2.0;
