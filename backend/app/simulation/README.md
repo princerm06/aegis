@@ -145,7 +145,8 @@ reserved there → 422).
 {"mode": "simulation", "actor": "operator-1",
  "mapping_mode": "calibrated_world" | "predefined_zones",
  "calibration_ref": "lab-cal-1",                     // required + nonblank for calibrated_world
- "zones": {"doorway": {"frame_id": "demo-floor-1", "x_m": 10, "y_m": 16}}}  // required nonempty for predefined_zones; forbidden for calibrated_world
+ "zones": {"doorway": {"frame_id": "demo-floor-1", "x_m": 10, "y_m": 16}},  // required nonempty for predefined_zones; forbidden for calibrated_world
+ "stream_url": "http://192.168.137.145:8090/stream.mjpg"}  // optional live view for dashboards
 ```
 
 `mode` is required. `calibration_ref` is an external/human assertion that a
@@ -153,6 +154,11 @@ world calibration exists; the backend computes nothing. Zone positions must use
 the scene frame (else 422). A registration is immutable for the epoch: an
 identical mapping replays (`duplicate: true`, original `registered_by` kept,
 actor ignored); a different mapping → 409. Reset clears all cameras.
+`stream_url` (plain `http(s)://`, no credentials, ≤ 500 chars) is not part of
+the mapping: the same mapping with a different `stream_url` updates it
+(`duplicate: false`, `simulation.camera_registered` again with the new record),
+so a restarted camera on a new address stays on the dashboard. The record in
+`state.cameras` carries it (`null` when the camera serves no view).
 
 `POST /cameras/{camera_id}/observations` — `CameraObservation`:
 

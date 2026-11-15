@@ -1242,7 +1242,11 @@ class SimulationStore:
 
     def register_camera(self, scenario_id: str, camera_id: str, request: CameraRegistration,
                         idempotency_key: str | None = None) -> ActionResponse:
-        """Register a SIMULATION camera mapping; immutable for the epoch."""
+        """Register a SIMULATION camera mapping; immutable for the epoch.
+
+        ``stream_url`` is not part of the mapping: a re-registration with the
+        same mapping and a different URL updates it (a restarted camera may
+        have moved to another address)."""
         session = self._session(scenario_id)
 
         def apply(now: datetime):
@@ -1258,13 +1262,18 @@ class SimulationStore:
                            "zones": {k: _dump(v) for k, v in (existing.zones or {}).items()} or None}
                 if current != config:
                     raise _conflict("Camera mapping is immutable within an epoch; reset to remap")
-                return _dump(existing), None, True
+                if existing.stream_url == request.stream_url:
+                    return _dump(existing), None, True
+                existing = existing.model_copy(update={"stream_url": request.stream_url})
+                session.cameras[camera_id] = existing
+                session.emit("simulation.camera_registered", _dump(existing), now)
+                return _dump(existing), None, False
             record = CameraRecord(
                 camera_id=camera_id, epoch=session.epoch, mapping_mode=request.mapping_mode,
                 calibration_ref=request.calibration_ref,
                 zones={k: v.model_copy(deep=True) for k, v in request.zones.items()}
                 if request.zones else None,
-                registered_by=request.actor, registered_at=now,
+                registered_by=request.actor, registered_at=now, stream_url=request.stream_url,
             )
             session.cameras[camera_id] = record
             session.emit("simulation.camera_registered", _dump(record), now)
