@@ -1,5 +1,5 @@
 import { responderName, shortId } from "./format";
-import type { AStarRoute, CameraSigns, SimulatedAssignment, SimulationProposal, SimulationState } from "./types";
+import type { AStarRoute, CameraSigns, Casualty, SimulatedAssignment, SimulationProposal, SimulationState, TrackRecord } from "./types";
 
 /* ───────────── Camera signs (aegis-cv-signs/0.1) ─────────────
  * Wording follows docs/CAMERA_SIGNS_INTEGRATION.md: literal measurements only
@@ -83,6 +83,39 @@ export function signLines(s: CameraSigns): SignLine[] {
     });
   }
   return out;
+}
+
+/** Camera signs tagged "attention": a display-order cue for the operator, never a priority. */
+export function warningSigns(s: CameraSigns | null | undefined): SignLine[] {
+  return s ? signLines(s).filter((l) => l.tone === "attention") : [];
+}
+
+/** Not seen for this long (or reported lost): folded away under "older" in the queue. */
+export const IN_VIEW_S = 60;
+
+const seenAt = (t: TrackRecord) => +new Date(t.latest_observation.observed_at);
+
+/**
+ * Observation queue, display order only (nothing is confirmed or discarded):
+ * people the camera sees now first, more warning signs first, then freshest.
+ */
+export function queueOrder(tracks: TrackRecord[], now: number): { current: TrackRecord[]; older: TrackRecord[] } {
+  const unlinked = tracks.filter((t) => !t.casualty_id);
+  const inView = (t: TrackRecord) => t.latest_observation.track?.state !== "lost" && now - seenAt(t) <= IN_VIEW_S * 1000;
+  const current = unlinked
+    .filter(inView)
+    .sort((a, b) => warningSigns(b.latest_visible_signs).length - warningSigns(a.latest_visible_signs).length || seenAt(b) - seenAt(a));
+  const older = unlinked.filter((t) => !inView(t)).sort((a, b) => seenAt(b) - seenAt(a));
+  return { current, older };
+}
+
+const SEVERITY_ORDER: Record<string, number> = { immediate: 0, unassessed: 1, delayed: 2, minor: 3, expectant: 4, deceased: 5 };
+
+/** Victim cards: the operator's priority first; within the same priority, more camera warning signs first. */
+export function victimOrder(state: SimulationState): Casualty[] {
+  const warnings = (id: string) => warningSigns(state.tracks.find((t) => t.casualty_id === id)?.latest_visible_signs).length;
+  const rank = (c: Casualty) => SEVERITY_ORDER[c.medical_assessment?.severity ?? "unassessed"] ?? 1;
+  return [...state.scenario.casualties].sort((a, b) => rank(a) - rank(b) || warnings(b.id) - warnings(a.id));
 }
 
 /* ───────────── Acknowledgement provenance ─────────────
