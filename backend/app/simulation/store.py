@@ -42,7 +42,7 @@ from backend.app.models import (
     Scenario,
     SceneMap,
 )
-from backend.app.services.scenarios import load_demo_scenario
+from backend.app.services.scenarios import camera_only_demo, load_demo_scenario
 from backend.app.simulation.events import EventLog
 from backend.app.simulation.models import (
     ActionResponse,
@@ -1184,6 +1184,8 @@ class SimulationStore:
                 raise _invalid("Scenario id must match the path scenario_id")
         elif scenario_id == DEMO_SCENARIO_ID:
             scenario = load_demo_scenario()
+            if camera_only_demo():
+                scenario = scenario.model_copy(update={"casualties": []})
         else:
             raise _not_found("Only the demo scenario loads without a supplied synthetic scenario")
         if request.add_demo_map and scenario.scene_map is None:
